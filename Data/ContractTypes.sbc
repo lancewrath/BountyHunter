@@ -7,20 +7,11 @@
                 <SubtypeId>CustomBounty</SubtypeId>
             </Id>
             <Icon>Textures\FactionLogo\Others\OtherIcon_31.dds</Icon>
-            <Icon>Textures\GUI\Icons\Contracts\BountyCustomContractHeader.dds</Icon>
-            <MinimumReputation>30</MinimumReputation>
+            <Icon>Textures\GUI\Icons\Contracts\BountyContractHeader.dds</Icon>
+            <MinimumReputation>0</MinimumReputation>
             <FailReputationPrice>0</FailReputationPrice>
-            <MinimumMoney>100000</MinimumMoney>
-            <MoneyReputationCoeficient>1</MoneyReputationCoeficient>
+            <MinimumMoney>0</MinimumMoney>
             <DurationMultiplier>1</DurationMultiplier>
-            <RemarkPeriodInS>60</RemarkPeriodInS>
-            <RemarkVariance>1000</RemarkVariance>
-            <KillRange>900</KillRange>
-            <KillRangeMultiplier>0.7</KillRangeMultiplier>
-            <ReputationLossForTarget>100</ReputationLossForTarget>
-            <RewardRadius>1500</RewardRadius>
-            <Duration_BaseTime>3600</Duration_BaseTime>
-
             <ChancesPerFactionType>
                 <ContractChance>
                     <DefinitionId>
@@ -43,8 +34,21 @@
                     </DefinitionId>
                     <Value>2</Value>
                 </ContractChance>
+				<ContractChance>
+                    <DefinitionId>
+                        <TypeId>MyObjectBuilder_FactionTypeDefinition</TypeId>
+                        <SubtypeId>FirstColonist</SubtypeId>
+                    </DefinitionId>
+                    <Value>2</Value>
+                </ContractChance>
+				<ContractChance>
+                    <DefinitionId>
+                        <TypeId>MyObjectBuilder_FactionTypeDefinition</TypeId>
+                        <SubtypeId>SpacePirates</SubtypeId>
+                    </DefinitionId>
+                    <Value>2</Value>
+                </ContractChance>				
             </ChancesPerFactionType>
-
         </ContractType>	        
     </ContractTypes>
 </Definitions>
