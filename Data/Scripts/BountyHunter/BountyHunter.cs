@@ -10,12 +10,12 @@ using Sandbox.ModAPI.Contracts;
 using SpaceEngineers.Game.ModAPI;
 using System.Collections.Generic;
 using System;
+using System.IO;
 using VRageMath;
 using Sandbox.Game.Entities.Blocks;
 using Sandbox.Game.World.Generator;
 using Sandbox.Game.SessionComponents;
 using VRage.Game;
-
 using VRage.Collections;
 using VRage;
 using VRage.ObjectBuilders;
@@ -23,525 +23,1378 @@ using Sandbox.Game.Contracts;
 using VRage.Library.Utils;
 using VRage.Game.ObjectBuilders.Components.Contracts;
 using Sandbox.Game.World;
-
+using static VRage.Game.MyObjectBuilder_Checkpoint;
+using Sandbox.Definitions;
 
 namespace RazMods
 {
     [MySessionComponentDescriptor(MyUpdateOrder.BeforeSimulation)]
     public class BountyHunter : MySessionComponentBase
     {
-        List<IMyFunctionalBlock> m_blocks = new List<IMyFunctionalBlock>();
-        List<BountyGrid> Bounties = new List<BountyGrid>();
-        List<BountyGrid> BountyQueue = new List<BountyGrid>();
+        #region vars
+        Action<object, MyDamageInformation> destroyHandler;
         Dictionary<long, IMyFaction> factions;
+        BountySpawner bountySpawner;
+        //Contract info
+        List<bountyData> bounties = new List<bountyData>();
+        QuestManager questManager = new QuestManager();
+
+        //Entity Lists for reference
+        List<Character> myCharacters = new List<Character>();
+        
+        //List of all contract blocks
+        List<ContractBlock> contractBlocks = new List<ContractBlock>();
+
+        List<SpawnCallback> spawnCallbacks = new List<SpawnCallback>();
+
+        //Data files - i'd rather store in seperate files and not save gamedata to prevent bloating from mods
+        ModItem thisMod;
+        public static string modpath = "";
+        const string bountySettingsFile = "BountyHunterSettings.xml";
+        const string NPCDataFile = "NPCData.xml";
+        const string bountyDataFile = "BountyData.xml";
+        const string questDataFile = "QuestData.xml";
+        const string activeBountyDataFile = "ActiveBountyData.xml";
+
+        //Server checks
         bool bIsServer = false;
-        bool binitialized = false;
+        bool bInitialized = false;
+        bool bSaveFlag = false;
         int delay = 0;
+        int questdelay = 0;
         public static int BOUNTYTICK = 600;
+        public static int QUESTTICK = 1000;
+        public static int MAXGLOBALBOUNTIES = 20;
         public static int MAXBOUNTIESPERCHARACTER = 3;
+        public static int REWARDMODIFIER = 1000;
         Random _random = new Random();
+
+        #endregion
+
+        #region MainLoop
+
         public override void UpdateBeforeSimulation()
         {
-            if (!binitialized)
+            if (!bInitialized)
                 Init();
+
             if (!bIsServer)
                 return;
+
             //put some space between when we call these functions so it doesn't lag out the game
             delay++;
+            questdelay++;
+            if(questdelay >= QUESTTICK)
+            {
+                List<PlayerQuest> pq = questManager.quests.FindAll(q => q.completed);
+                foreach (PlayerQuest q in pq)
+                {
+                    //set Quest log
+                    PlayerQuest playerQuests = questManager.quests.Find(pp => !pp.completed && pp.playerID == q.playerID);
+                    if (playerQuests != null)
+                    {
+                        MyVisualScriptLogicProvider.SetQuestlog(true, playerQuests.questName, playerQuests.playerID);
+                        playerQuests.questObjective = MyVisualScriptLogicProvider.AddQuestlogObjective(playerQuests.objective, false, false, playerQuests.playerID);
+                        playerQuests.questDetail = MyVisualScriptLogicProvider.AddQuestlogDetail(playerQuests.questdesc, false, true, playerQuests.playerID);
+                    }
+                    else
+                    {
+                        MyVisualScriptLogicProvider.SetQuestlog(false, "None", q.playerID);
+                    }
+                }
+
+
+                questManager.quests.RemoveAll(q => q.completed);
+                questdelay = 0;
+            }
             if (delay >= BOUNTYTICK)
             {
-                factions = MyAPIGateway.Session.Factions.Factions;
-                BountyGrid[] queue = BountyQueue.ToArray();
-                Dictionary<long, int> bountynotifications = new Dictionary<long, int>();
-                for (int i = 0; i < queue.Length; i++)
+                UpdateFactions();
+                if(bounties.Count < MAXGLOBALBOUNTIES)
+                {
+                    //Add a new bounty
+                    if (contractBlocks.Count > 0)
+                    {
+                        GenerateBounty();
+                    }
+
+                }
+                
+
+
+                delay = 0;
+            }
+            if(bSaveFlag)
+            {
+                string bountydata = MyAPIGateway.Utilities.SerializeToXML(bounties);
+                TextWriter tw = MyAPIGateway.Utilities.WriteFileInWorldStorage(bountyDataFile, typeof(string));
+                tw.Write(bountydata);
+                tw.Close();
+
+                List<characterData> characterdata = GetCharacterData(myCharacters);
+                string cdata = MyAPIGateway.Utilities.SerializeToXML(characterdata);
+                tw = MyAPIGateway.Utilities.WriteFileInWorldStorage(NPCDataFile, typeof(string));
+                tw.Write(cdata);
+                tw.Close();
+
+                
+                string qdata = MyAPIGateway.Utilities.SerializeToXML(questManager);
+                tw = MyAPIGateway.Utilities.WriteFileInWorldStorage(questDataFile, typeof(string));
+                tw.Write(qdata);
+                tw.Close();
+
+                bSaveFlag = false;
+            }
+            base.UpdateBeforeSimulation();
+        }
+
+        #endregion
+
+        #region BountyFunctions
+
+        public void GenerateBounty()
+        {
+            //select a random faction
+            int randomfaction = _random.Next(factions.Count - 1);
+            IMyFaction afaction = null;
+            int i = 0;
+            foreach (var item in factions)
+            {
+                if (i == randomfaction)
+                {
+                    afaction = item.Value;
+                    break;
+                }
+                i++;
+            }
+
+            if (afaction == null)
+                return;
+
+            //select random enemy faction      
+            try
+            {
+                SpawnCallback sc = new SpawnCallback(this,afaction);
+                spawnCallbacks.Add(sc);
+                string shipname = BountyGenerator.ShipNames[_random.Next(0, BountyGenerator.ShipNames.Length - 1)];
+                List<IMyCubeGrid> grids = bountySpawner.SpawnBounty(afaction, sc.action, shipname);
+                sc.SetList(grids);
+            }
+            catch (Exception exc)
+            {
+                //MyAPIGateway.Utilities.ShowMessage("Error", exc.StackTrace);
+                //Console.WriteLine(exc.ToString());
+                //MyAPIGateway.Utilities.ShowMessage("Error", exc.StackTrace);
+                //MyVisualScriptLogicProvider.ShowNotificationToAll("Error "+ exc.Message, 5000, "Red");
+            }
+
+            
+        }
+
+        public void CreateBountyData(IMyFaction afaction, List<IMyCubeGrid> grids)
+        {
+            if (afaction == null)
+                return;
+            if (grids == null)
+                return;
+            if (grids.Count > 0)
+            {   
+                bountyData bData = new bountyData();
+                IMyCubeGrid bountygrid = GetLargestGrid(grids);
+                //MyAPIGateway.Utilities.ShowMessage("Bounty", "Check Spawned Grid");
+                if (bountygrid != null)
                 {
 
-                    //let's add some bounties!
-                    Dictionary<long, int> bnotes = AddBounty(queue[i]);
-                    foreach (var item in bnotes)
+                    List<IMySlimBlock> blocks = new List<IMySlimBlock>();
+                    bountygrid.GetBlocks(blocks);
+                    int blockcount = blocks.Count;
+                    //MyAPIGateway.Utilities.ShowMessage("Bounty", "Bounty Grid Spawned: " + bountygrid.DisplayName);
+                    //MyVisualScriptLogicProvider.ShowNotificationToAll("Bounty Grid Spawned: " + bountygrid.DisplayName, 5000, "White");
+                    IMyCockpit cockpit = GetCockpitBlock(bountygrid);
+
+                    string charname = "Bounty";
+                    bool isMale = true;
+                    //Generate a name
+                    if (_random.Next(0, 99) > 49)
                     {
-                        if(!bountynotifications.ContainsKey(item.Key))
+                        charname = NameGenerator.Generate(NameGenerator.Gender.Male);
+                    }
+                    else
+                    {
+                        isMale = false;
+                        charname = NameGenerator.Generate(NameGenerator.Gender.Female);
+                    }
+                    bData.name = charname;
+                    bData.isMale = isMale;
+                    MyAPIGateway.Session.Factions.AddNewNPCToFaction(afaction.FactionId, charname);
+                    //MyAPIGateway.Utilities.ShowMessage("Bounty", "Added " + charname + " to " + afaction.Name);
+                    var mems = afaction.Members;
+                    MyFactionMember bountymember = new MyFactionMember();
+                    foreach (var member in mems)
+                    {
+                        if (MyVisualScriptLogicProvider.GetPlayersName(member.Value.PlayerId).Equals(charname))
                         {
-                            bountynotifications.Add(item.Key, item.Value);
+                            bountymember = member.Value;
+                            break;
+                        }
+                    }
+                    bData.characterowner = bountymember.PlayerId;
+                    if (cockpit != null)
+                    {
+                        if (bountygrid.IsStatic)
+                        {
+                            bData.targettype = BountyTargetType.COCKPIT;
+                            bountygrid.Physics.SetSpeeds(Vector3D.Zero, Vector3D.Zero);
+                            bountygrid.ChangeGridOwnership(bountymember.PlayerId, MyOwnershipShareModeEnum.Faction);
+                            var pos = new MyPositionAndOrientation(bountygrid.PositionComp.WorldAABB.Center + bountygrid.WorldMatrix.Backward * 2.5, bountygrid.WorldMatrix.Backward, bountygrid.WorldMatrix.Up);
+                            IMyCharacter character = bountySpawner.CreateNPCCharacter(bountymember.PlayerId, charname, pos, isMale);
+                            Character characterData = new Character(character, bountygrid);
+                            myCharacters.Add(characterData);
+                            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Generated Character");
+                            //MyVisualScriptLogicProvider.ShowNotificationToAll("Generated Character", 5000, "White");
+                            character.CharacterDied += Character_CharacterDied;
+                            //try to put character in cockpit
+                            character.SetPosition(cockpit.GetPosition());
+                            character.AimedPoint = cockpit.GetPosition();
+                            character.Use();
+                            cockpit.AttachPilot(character);
+                            bData.targettype = BountyTargetType.CHARACTER;
+                            bData.targetid = character.EntityId;
+                            bData.characterSpawned = true;
+                            bData.characterid = character.EntityId;
                         } else
                         {
-                            bountynotifications[item.Key]++;
-                        }
-                    }
-                }
-                foreach (var bnotif in bountynotifications)
-                {
-                    MyVisualScriptLogicProvider.ShowNotification(bnotif.Value + " New Bounties Available!", 5000, "White", bnotif.Key);
-                }
-
-                foreach (var bg in Bounties)
-                {
-                    if (bg.ConditionMet() || bg.GetCharacter()==null)
-                    {
-                        foreach (var c in bg.contracts)
-                        {
-                            //should have been completed, if not remove.
-                            contractData cd = bg.GetActiveContracts().Find(x => x.contractid == c);
-                            if (cd != null)
-                            {
-                                if (!MyAPIGateway.ContractSystem.RemoveContract(cd.contractid))
-                                {
-                                    MyAPIGateway.ContractSystem.TryAbandonCustomContract(cd.contractid, cd.playerid);
-                                    MyVisualScriptLogicProvider.ShowNotification("Target is Dead, Contract is Void", 5000, "Red", cd.playerid);
-                                }
-                                else
-                                {
-                                    MyVisualScriptLogicProvider.ShowNotification("Target is Dead, Contract is Void", 5000, "Red", cd.playerid);
-                                }
-                            } else
-                            {
-                                MyAPIGateway.ContractSystem.RemoveContract(c);
-                            }
                             
-
+                            cockpit.DisplayName = charname;
+                            cockpit.Name = charname;
+                            cockpit.CustomName = charname;
+                            bData.targettype = BountyTargetType.COCKPIT;
+                            bData.targetid = cockpit.EntityId;
                         }
-                        bg.contracts.Clear();
-                        bg.GetActiveContracts().Clear();
+                        //setup bouty data                       
+                        bData.factionid = afaction.FactionId;
+                                               
+                    }
+                    else
+                    {
+
+                        IMyRemoteControl remote = GetRemoteControlBlock(bountygrid);
+                        if(remote != null)
+                        {
+                            bData.targetid = remote.EntityId;
+                            remote.DisplayName = charname;
+                            remote.Name = charname;
+                            remote.CustomName = charname;
+                            bData.targettype = BountyTargetType.REMOTE;
+                        }
+                        else
+                        {
+                            IMySlimBlock b = blocks[_random.Next(0, blocks.Count - 1)];
+                            //choose some random block
+                            b.FatBlock.DisplayName = charname;
+                            b.FatBlock.Name = charname;
+                            bData.targetid = b.FatBlock.EntityId;
+                            bData.targettype = BountyTargetType.BLOCK;
+                        }                 
+                        //setup bounty data                        
+                        bData.factionid = afaction.FactionId;                        
                         
-                    } else
+                        //MyAPIGateway.Utilities.ShowMessage("Bounty", "Target is a Grid");
+                        //MyVisualScriptLogicProvider.ShowNotificationToAll("Target is a Grid", 5000, "White");
+
+                    }
+
+                    List<IMyFaction> enemies = GetEnemyFactions(afaction);
+                    IMyFaction placedfaction = enemies[_random.Next(enemies.Count - 1)];
+                    bData.placedfaction = placedfaction.FactionId;
+                    bData.reward = blockcount * REWARDMODIFIER;
+                    bounties.Add(bData);
+                    //MyAPIGateway.Utilities.ShowMessage("Bounty", "Generate Bounty");
+                    AddBountytoBlocks(bData);
+                    return;
+
+                }
+
+                //MyAPIGateway.Utilities.ShowMessage("Bounty", "Add Bounty Finished");
+
+                //MyVisualScriptLogicProvider.ShowNotificationToAll(" New Bounties Available!", 5000, "White");
+            } else
+            {
+                //MyAPIGateway.Utilities.ShowMessage("Bounty", "Spawned Grid had "+grids.Count);
+            }
+        }
+
+        public void AddBountytoBlocks(bountyData bData)
+        {
+            IMyEntity ent = MyAPIGateway.Entities.GetEntityById(bData.targetid);
+            IMyFaction efaction = MyAPIGateway.Session.Factions.TryGetFactionById(bData.factionid);
+            IMyFaction pfaction = MyAPIGateway.Session.Factions.TryGetFactionById(bData.placedfaction);
+
+            string reason = BountyGenerator.missionreason[_random.Next(0, BountyGenerator.missionreason.Length - 1)];
+            reason = reason.Replace("@TARGET@", ent.DisplayName);
+            reason = reason.Replace("@FACTION@", efaction.Name);
+            reason = reason.Replace("@PFACTION@",pfaction.Name);
+
+            string about = BountyGenerator.missionend[_random.Next(0,BountyGenerator.missionend.Length - 1)];
+            about = about.Replace("@TARGET@",ent.DisplayName);
+            about = about.Replace("@FACTION@",efaction.Name);
+            about = about.Replace("@PFACTION@", pfaction.Name);
+
+            string reward = BountyGenerator.rewardtext[_random.Next(0,BountyGenerator.rewardtext.Length - 1)];
+            string goodbye = BountyGenerator.missiongoodbye[_random.Next(0,BountyGenerator.missiongoodbye.Length - 1)];
+            
+            string bountyDescription = reason;
+            bData.desc = bountyDescription;
+            if (ent != null && efaction != null && pfaction != null)
+            {
+                foreach (ContractBlock cblock in contractBlocks)
+                {
+                    if (cblock.faction.FactionId != bData.factionid)
                     {
-                        foreach (var c in bg.contracts.ToArray())
+                        MyContractHunter hunter = new MyContractHunter(cblock.contractBlock.EntityId, bData.reward, 1, 320, ent.EntityId);
+                        hunter.SetDetails("Bounty Contract", bountyDescription, 200, 10);
+                        long oldbalance = 0;
+
+                        List<IMyPlayer> players = new List<IMyPlayer>();
+                        MyAPIGateway.Players.GetPlayers(players);
+                        IMyPlayer player = players.Find(x => x.IdentityId == cblock.contractBlock.OwnerId);
+
+                        if (player != null)
                         {
-                            //should have been completed, if not remove.
-                            contractData cdb = bg.GetActiveContracts().Find(x => x.contractid == c);
-                            if (cdb != null)
-                            {
-                                if (!MyAPIGateway.ContractSystem.IsContractActive(cdb.contractid))
-                                {
-                                    MyAPIGateway.ContractSystem.RemoveContract(c);
-                                    MyVisualScriptLogicProvider.ShowNotification("Contract was void by provider. Removing", 5000, "Red", cdb.playerid);
-                                    bg.GetActiveContracts().Remove(cdb);
-                                    bg.contracts.Remove(c);
-                                }
-
-                            }
-                            
-                         
+                            player.RequestChangeBalance(bData.reward * 2);
                         }
-
+                        MyAddContractResultWrapper cw = MyAPIGateway.ContractSystem.AddContract(hunter);
+                        if (cw.Success)
+                        {
+                            contract c = new contract(cw.ContractId, cw.ContractConditionId);
+                            bData.contracts.Add(c);
+                            bSaveFlag = true;
+                        } else
+                        {
+                            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Failed to add Bounty");
+                            //MyVisualScriptLogicProvider.ShowNotificationToAll("Failed to add Bounty", 5000, "Red");
+                        }
+                        if (player != null)
+                        {
+                            player.RequestChangeBalance(-(bData.reward * 2));
+                        }
 
                     }
                 }
-                delay = 0;
+            }
+            else
+            {
+                bSaveFlag = true;
+                bounties.Remove(bData);
+                return;
             }
 
 
         }
 
 
-        void Init()
-        {
-            bIsServer = MyAPIGateway.Multiplayer.IsServer;
-            binitialized = true;
+        #endregion
 
+        #region Initialization
+
+        public void Init()
+        {
+            
+            //make sure this runs serverside only for xbox compat.
+            bIsServer = MyAPIGateway.Multiplayer.IsServer;
+            bInitialized = true;
+            
             if (!bIsServer)
                 return;
+            thisMod = MyAPIGateway.Session.Mods.Find(x => x.Name.Contains("BountyHunter"));
+            modpath = thisMod.GetPath();
 
-            //make sure economy and bounty contracts are on
             MyAPIGateway.Session.SessionSettings.EnableEconomy = true;
             MyAPIGateway.Session.SessionSettings.EnableBountyContracts = true;
 
             //get current factions
             factions = MyAPIGateway.Session.Factions.Factions;
 
+            //check if bounty file exists, get a list of all contracts
+            if(MyAPIGateway.Utilities.FileExistsInWorldStorage(bountyDataFile, typeof(string)))
+            {
+                var reader = MyAPIGateway.Utilities.ReadFileInWorldStorage(bountyDataFile, typeof(string));
+                if (reader != null)
+                {
+                    string data = reader.ReadToEnd();
+                    bounties = MyAPIGateway.Utilities.SerializeFromXML<List<bountyData>>(data);
+                }
+            }
+            //check if NPC Data file exists, get a list of all contracts
+            if (MyAPIGateway.Utilities.FileExistsInWorldStorage(NPCDataFile, typeof(string)))
+            {
+                var reader = MyAPIGateway.Utilities.ReadFileInWorldStorage(NPCDataFile, typeof(string));
+                if (reader != null)
+                {
+                    string data = reader.ReadToEnd();
+                    List<characterData> cdata = MyAPIGateway.Utilities.SerializeFromXML<List<characterData>>(data);
+                    if(cdata != null)
+                    {
+                        foreach (var character in cdata)
+                        {
+                            IMyCharacter ch = (IMyCharacter)MyVisualScriptLogicProvider.GetEntityById(character.characterid);
+                            if(ch != null)
+                            {
+                                Character mycharacter = new Character(ch);
+                                //check if there is a grid attached
+                                IMyCubeGrid cgrid = (IMyCubeGrid)MyVisualScriptLogicProvider.GetEntityById(character.gridid);
+                                if(cgrid != null)
+                                {
+                                    mycharacter.characterGrid = cgrid;
+                                }
+                                myCharacters.Add(mycharacter);
+                            }
+                        }
+                    }
+                }
+            }
+            if (MyAPIGateway.Utilities.FileExistsInWorldStorage(questDataFile, typeof(string)))
+            {
+                var reader = MyAPIGateway.Utilities.ReadFileInWorldStorage(questDataFile, typeof(string));
+                if (reader != null)
+                {
+                    string data = reader.ReadToEnd();
+                    QuestManager qm = MyAPIGateway.Utilities.SerializeFromXML<QuestManager>(data);
+                    if(qm != null)
+                        questManager = qm;
+                }
+            }
+            bountySpawner = new BountySpawner();
+            bountySpawner.SetupSpawns();
+
 
             //fetch current entity list
             HashSet<IMyEntity> entities = new HashSet<IMyEntity>();
             MyAPIGateway.Entities.GetEntities(entities);
 
-            foreach (IMyEntity entity in entities)
+            //Parse existing characters in world
+            IMyEntity[] ents = new IMyEntity[entities.Count];
+            entities.CopyTo(ents, 0);
+
+            foreach (IMyEntity ent in ents)
             {
-                CheckNewGrid(entity);
+                if(CheckIsCharacter(ent))
+                {
+                    //prune list for grid checks
+                    entities.Remove(ent);
+                }
             }
 
-            //MyAPIGateway.Session.SessionSettings.EconomyTickInSeconds = 10;
-            //MyAPIGateway.Utilities.ShowNotification("Initialized", 5000);
-           
-            MyAPIGateway.Utilities.ShowMessage("Bounty", "Mod Initialized");
-            MyAPIGateway.Entities.OnEntityAdd += CheckNewGrid;
+            //Parse existing grids in world
+            ents = new IMyEntity[entities.Count];
+            entities.CopyTo(ents, 0);
+            foreach (IMyEntity ent in ents)
+            {
+                if (CheckNewGrid(ent))
+                {
+                    //prune list for grid checks
+                    entities.Remove(ent);
+                }
+            }
+            entities.CopyTo(ents, 0);
+            foreach (IMyEntity ent in ents)
+            {
+                bountySpawner.CheckPlanets(ent);
 
-            //MyAPIGateway.Entities.OnEntityRemove += RemoveTheGrid;
-            MyAPIGateway.Session.DamageSystem.RegisterAfterDamageHandler(1, BountyDamageHandler);
-            MyAPIGateway.ContractSystem.CustomFinish += ContractSystem_CustomFinish;
-            MyAPIGateway.ContractSystem.CustomFinishFor += ContractSystem_CustomFinishFor;
-            MyAPIGateway.ContractSystem.CustomFail += ContractSystem_CustomFail;
-            MyAPIGateway.ContractSystem.CustomActivateContract += ContractSystem_CustomActivateContract;           
-            MyAPIGateway.ContractSystem.CustomCanActivateContract = ActivationResults;
-            MyAPIGateway.ContractSystem.CustomUpdate += ContractSystem_CustomUpdate;
-            MyAPIGateway.ContractSystem.CustomNeedsUpdate = UpdateContract;
-            MyAPIGateway.ContractSystem.CustomFailFor += ContractSystem_CustomFailFor;
-            MyAPIGateway.ContractSystem.CustomTimeRanOut += ContractSystem_CustomTimeRanOut;
-            MyAPIGateway.ContractSystem.CustomCleanUp += ContractSystem_CustomCleanUp;
-            MyAPIGateway.ContractSystem.CustomConditionFinished += ContractSystem_CustomConditionFinished;
-            MyAPIGateway.ContractSystem.CustomFinishCondition += CustomConditionFinish;
-            delay = MyAPIGateway.Session.ElapsedPlayTime.Minutes;
+            }
+
+            //destroyHandler = DestroyHandler;
+
+            SetCallbacks();
+            MyAPIGateway.Utilities.ShowMessage("Bounty", "BOUNTY SYSTEM INITIALIZED!");
         }
 
+        public void SetCallbacks()
+        {
+
+            //Set Callbacks to reduce load on main loop
+            
+            MyAPIGateway.Entities.OnEntityAdd += CheckCharacter;
+            MyAPIGateway.Entities.OnEntityAdd += CheckGrid;
+            MyAPIGateway.Entities.OnEntityRemove += ProcessRemovedGrid;
+            MyAPIGateway.ContractSystem.CustomActivateContract += ContractSystem_CustomActivateContract;
+            MyAPIGateway.ContractSystem.CustomCanActivateContract += ActivationResults;
+            MyAPIGateway.ContractSystem.CustomUpdate += ContractSystem_CustomUpdate;
+            MyAPIGateway.ContractSystem.CustomNeedsUpdate += UpdateContract;
+            MyAPIGateway.ContractSystem.CustomTimeRanOut += ContractSystem_CustomTimeRanOut;
+            MyAPIGateway.ContractSystem.CustomFinishCondition += CustomConditionFinish;
+            MyAPIGateway.ContractSystem.CustomConditionFinished += ContractSystem_CustomConditionFinished;
+            MyAPIGateway.ContractSystem.CustomFinishFor += ContractSystem_CustomFinishFor;
+            MyAPIGateway.ContractSystem.CustomFinish += ContractSystem_CustomFinish;
+            MyAPIGateway.ContractSystem.CustomFailFor += ContractSystem_CustomFailFor;
+            MyAPIGateway.ContractSystem.CustomFail += ContractSystem_CustomFail;
+            MyAPIGateway.ContractSystem.CustomCleanUp += ContractSystem_CustomCleanUp;
+           //MyAPIGateway.Session.DamageSystem.RegisterDestroyHandler(1, destroyHandler);
+            MyAPIGateway.Session.DamageSystem.RegisterAfterDamageHandler(1, BountyDamageHandler);
+        }
+
+        #endregion
+
+        #region CallBacks
         private void BountyDamageHandler(object target, MyDamageInformation info)
         {
-            if (target as IMyCharacter != null)
+            if (target as IMySlimBlock != null)
             {
-                IMyCharacter obj = target as IMyCharacter;
-                if (obj != null)
+                IMySlimBlock entity = target as IMySlimBlock;
+                if (entity != null)
                 {
-                    BountyGrid bg = Bounties.Find(x => x.npc == obj);
-                    if (bg != null)
+                    if (entity.Integrity <= 0)
                     {
-                        
-                        bg.SetLastAttackerID(info.AttackerId);
-                        if(MyAPIGateway.Session.ElapsedPlayTime.TotalSeconds-bg.lastinsultTime > 5 && !obj.IsDead)
+
+                        List<bountyData> bData = bounties.FindAll(x => x.targetid == entity.FatBlock.EntityId);
+                        //MyAPIGateway.Utilities.ShowMessage("Bounty", entity.FatBlock.DisplayName + " Died!");
+                        List<IMyPlayer> players = new List<IMyPlayer>();
+                        MyAPIGateway.Players.GetPlayers(players);
+                        string insult = Insults.insults[_random.Next(0, Insults.insults.Length - 1)];
+                        string deaths = DeathGenerator.deaths[_random.Next(0, DeathGenerator.deaths.Length-1)];
+
+                        foreach (bountyData bd in bData)
                         {
-                            string insult = Insults.insults[_random.Next(1616)];
-                            var values = bg.GetActiveContracts();
-                            if (values != null)
+                            if (!bd.targetdead && !bd.characterSpawned)
                             {
-                                List<long> pid = new List<long>();
-                                foreach (var pair in values)
+                                if (bd.targettype == BountyTargetType.BLOCK || bd.targettype == BountyTargetType.REMOTE)
                                 {
-                                    if (!pid.Contains(pair.playerid))
+                                    bd.targetdead = true;
+                                    MyVisualScriptLogicProvider.PlaySingleSoundAtPosition("BountyComplete", entity.FatBlock.GetPosition());
+                                    //Find all players for contract, reward bonus for the one who made the kill
+                                    foreach (var acon in bd.activeContracts)
                                     {
-                                        pid.Add(pair.playerid);
+                                        if (acon.playerid == info.AttackerId)
+                                        {
+
+                                            MyVisualScriptLogicProvider.ShowNotification("KILL BONUS " + bd.reward * 0.25 + " Credits", 10000, "Orange", acon.playerid);
+                                            MyVisualScriptLogicProvider.ShowNotification("Collected Bounty " + bd.reward + " Credits", 10000, "Green", acon.playerid);
+                                            acon.bonus = true;
+                                            IMyPlayer p = players.Find(x => x.IdentityId == acon.playerid);
+
+
+                                            
+                                            MyAPIGateway.ContractSystem.TryFinishCustomContract(acon.contractid);
+                                        }
+                                        else
+                                        {
+                                            IMyPlayer p = players.Find(x => x.IdentityId == acon.playerid);
+                                            if (p != null)
+                                            {
+                                                if (MeasureDistance(p.Character.GetPosition(), entity.FatBlock.GetPosition()) <= 5000)
+                                                {
+                                                    MyVisualScriptLogicProvider.ShowNotification("Collected Bounty " + bd.reward + " Credits", 10000, "Green", acon.playerid);
+                                                    MyAPIGateway.ContractSystem.TryFinishCustomContract(acon.contractid);
+                                                }
+                                                else
+                                                {
+                                                    IMyPlayer o = players.Find(x => x.IdentityId == info.AttackerId);
+                                                    if (o != null)
+                                                    {
+                                                        MyVisualScriptLogicProvider.ShowNotification("Bounty Failed " + entity.FatBlock.DisplayName + " was killed by " + o.DisplayName, 5000, "Red", acon.playerid);
+                                                        MyVisualScriptLogicProvider.PlaySingleSoundAtPosition("BountyFail", p.Character.GetPosition());
+                                                    }
+                                                    else
+                                                    {
+                                                        MyVisualScriptLogicProvider.ShowNotification("Bounty Failed " + entity.FatBlock.DisplayName + " was killed.", 5000, "Red", acon.playerid);
+                                                    }
+                                                    MyVisualScriptLogicProvider.PlaySingleSoundAtPosition("BountyFail", p.Character.GetPosition());
+                                                    MyAPIGateway.ContractSystem.TryFailCustomContract(acon.contractid);
+                                                }
+                                            }
+
+                                        }
                                     }
                                 }
-                                
-                                foreach (var item in pid)
+                                else if (bd.targettype == BountyTargetType.COCKPIT && !bd.characterSpawned)
                                 {
-                                    MyVisualScriptLogicProvider.SendChatMessageColored(insult, Color.Red, obj.DisplayName, item);
+                                    //spawn a character here
+                                    var pos = new MyPositionAndOrientation(entity.FatBlock.PositionComp.WorldAABB.Center + entity.FatBlock.WorldMatrix.Backward * 2.5, entity.FatBlock.WorldMatrix.Backward, entity.FatBlock.WorldMatrix.Up);
+                                    IMyCharacter character = bountySpawner.CreateNPCCharacter(bd.characterowner, entity.FatBlock.DisplayName, pos, bd.isMale);
+                                    Character characterData = new Character(character, entity.FatBlock.CubeGrid);
+                                    myCharacters.Add(characterData);
+                                    character.CharacterDied += Character_CharacterDied;
+                                    character.SetPosition(entity.FatBlock.GetPosition());
+                                    bd.characterSpawned = true;
+                                    bd.characterid = character.EntityId;
+                                    //make sure character is saved in case restart happens
+                                    bSaveFlag = true;
+                                    
+                                    foreach (var acon in bd.activeContracts)
+                                    {
+                                        
+                                        MyVisualScriptLogicProvider.SendChatMessageColored(insult, Color.Red, bd.name, acon.playerid);
+                                        MyVisualScriptLogicProvider.AddGPSToEntity(bd.name, bd.name, "Kill Target", Color.Orange);
+                                        MyVisualScriptLogicProvider.SetGPSHighlight(bd.name, bd.name, "Kill Target", Color.Orange);
+                                    }
+
+                                }
+                                else if (bd.targettype == BountyTargetType.COCKPIT && bd.characterSpawned)
+                                {
+                                    IMyEntity ent = MyAPIGateway.Entities.GetEntityById(bd.characterid);
+                                    if (ent != null)
+                                    {
+                                        if (ent as IMyCharacter != null)
+                                        {
+                                            IMyCharacter character = target as IMyCharacter;
+
+                                            if (character != null)
+                                            {
+                                                if (character.IsDead)
+                                                {
+                                                    bd.targetdead = true;
+                                                    Character cdata = myCharacters.Find(c => c.Equals(character));
+                                                    if(cdata != null)
+                                                        myCharacters.Remove(cdata);
+                                                    MyVisualScriptLogicProvider.PlaySingleSoundAtPosition("BountyComplete", character.GetPosition());
+                                                    MyVisualScriptLogicProvider.RemoveGPSFromEntityForAll(bd.name, bd.name, "Target Dead");
+                                                    MyVisualScriptLogicProvider.CreateExplosion(character.GetPosition(), 100);
+                                                    //Find all players for contract, reward bonus for the one who made the kill
+                                                    foreach (var acon in bd.activeContracts)
+                                                    {
+                                                        MyVisualScriptLogicProvider.SendChatMessageColored(deaths, Color.Red, bd.name, acon.playerid);
+                                                        if (acon.playerid == info.AttackerId)
+                                                        {
+
+                                                            MyVisualScriptLogicProvider.ShowNotification("KILL BONUS " + bd.reward * 0.25 + " Credits", 10000, "Orange", acon.playerid);
+                                                            MyVisualScriptLogicProvider.ShowNotification("Collected Bounty " + bd.reward + " Credits", 10000, "Green", acon.playerid);
+                                                            acon.bonus = true;
+                                                            IMyPlayer p = players.Find(x => x.IdentityId == acon.playerid);
+
+
+
+                                                            MyAPIGateway.ContractSystem.TryFinishCustomContract(acon.contractid);
+                                                        }
+                                                        else
+                                                        {
+                                                            IMyPlayer p = players.Find(x => x.IdentityId == acon.playerid);
+                                                            if (p != null)
+                                                            {
+                                                                if (MeasureDistance(p.Character.GetPosition(), character.GetPosition()) <= 5000)
+                                                                {
+                                                                    MyVisualScriptLogicProvider.ShowNotification("Collected Bounty " + bd.reward + " Credits", 10000, "Green", acon.playerid);
+                                                                    MyAPIGateway.ContractSystem.TryFinishCustomContract(acon.contractid);
+                                                                }
+                                                                else
+                                                                {
+                                                                    IMyPlayer o = players.Find(x => x.IdentityId == info.AttackerId);
+                                                                    if (o != null)
+                                                                    {
+                                                                        MyVisualScriptLogicProvider.ShowNotification("Bounty Failed " + character.DisplayName + " was killed by " + o.DisplayName, 5000, "Red", acon.playerid);
+                                                                        MyVisualScriptLogicProvider.PlaySingleSoundAtPosition("BountyFail", p.Character.GetPosition());
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        MyVisualScriptLogicProvider.ShowNotification("Bounty Failed " + character.DisplayName + " was killed.", 5000, "Red", acon.playerid);
+                                                                    }
+                                                                    MyVisualScriptLogicProvider.PlaySingleSoundAtPosition("BountyFail", p.Character.GetPosition());
+                                                                    MyAPIGateway.ContractSystem.TryFailCustomContract(acon.contractid);
+                                                                }
+                                                            }
+
+                                                        }
+                                                        
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
-
-                            //MyAPIGateway.Utilities.ShowMessage(obj.DisplayName, insult);
-                            bg.lastinsultTime = MyAPIGateway.Session.ElapsedPlayTime.TotalSeconds;
                         }
-                        
-                        //Do something cool here
                     }
                 }
+            } 
+            else if (target as IMyCharacter != null)
+            {
+                IMyCharacter character = target as IMyCharacter;
+                if(character != null)
+                {
+                    if (character.IsDead)
+                    {
+                        Character cdata = myCharacters.Find(c => c.Equals(character));
+                        if (cdata != null)
+                            myCharacters.Remove(cdata);
+                        List<bountyData> bData = bounties.FindAll(x => x.targetid == character.EntityId || x.characterid == character.EntityId);
+                        //MyAPIGateway.Utilities.ShowMessage("Bounty", entity.FatBlock.DisplayName + " Died!");
+                        MyAPIGateway.Utilities.ShowMessage("Bounty", "Bounties for character: " + bData.Count);
+                        List<IMyPlayer> players = new List<IMyPlayer>();
+                        MyAPIGateway.Players.GetPlayers(players);
+                        string deaths = DeathGenerator.deaths[_random.Next(0, DeathGenerator.deaths.Length - 1)];
+                        foreach (bountyData bd in bData)
+                        {
+                            if (!bd.targetdead)
+                            {
+
+                                bd.targetdead = true;
+                                MyVisualScriptLogicProvider.PlaySingleSoundAtPosition("BountyComplete", character.GetPosition());
+                                MyVisualScriptLogicProvider.RemoveGPSFromEntityForAll(bd.name, bd.name, "Target Dead");
+                                MyVisualScriptLogicProvider.CreateExplosion(character.GetPosition(), 100);
+                                //Find all players for contract, reward bonus for the one who made the kill
+                                foreach (var acon in bd.activeContracts)
+                                {
+                                    MyVisualScriptLogicProvider.SendChatMessageColored(deaths, Color.Red, bd.name, acon.playerid);
+                                    if (acon.playerid == info.AttackerId)
+                                    {
+
+                                        MyVisualScriptLogicProvider.ShowNotification("KILL BONUS " + bd.reward * 0.25 + " Credits", 10000, "Orange", acon.playerid);
+                                        MyVisualScriptLogicProvider.ShowNotification("Collected Bounty " + bd.reward + " Credits", 10000, "Green", acon.playerid);
+
+
+
+                                        acon.bonus = true;
+                                        IMyPlayer p = players.Find(x => x.IdentityId == acon.playerid);
+
+
+
+                                        MyAPIGateway.ContractSystem.TryFinishCustomContract(acon.contractid);
+                                    }
+                                    else
+                                    {
+                                        IMyPlayer p = players.Find(x => x.IdentityId == acon.playerid);
+                                        if (p != null)
+                                        {
+
+                                            if (MeasureDistance(p.Character.GetPosition(), character.GetPosition()) <= 5000)
+                                            {
+                                                MyVisualScriptLogicProvider.ShowNotification("Collected Bounty " + bd.reward + " Credits", 10000, "Green", acon.playerid);
+                                                MyAPIGateway.ContractSystem.TryFinishCustomContract(acon.contractid);
+                                            }
+                                            else
+                                            {
+                                                IMyPlayer o = players.Find(x => x.IdentityId == info.AttackerId);
+                                                if (o != null)
+                                                {
+                                                    MyVisualScriptLogicProvider.ShowNotification("Bounty Failed " + character.DisplayName + " was killed by " + o.DisplayName, 5000, "Red", acon.playerid);
+                                                    MyVisualScriptLogicProvider.PlaySingleSoundAtPosition("BountyFail", p.Character.GetPosition());
+                                                }
+                                                else
+                                                {
+                                                    MyVisualScriptLogicProvider.ShowNotification("Bounty Failed " + character.DisplayName + " was killed.", 5000, "Red", acon.playerid);
+                                                }
+                                                MyVisualScriptLogicProvider.PlaySingleSoundAtPosition("BountyFail", p.Character.GetPosition());
+                                                MyAPIGateway.ContractSystem.TryFailCustomContract(acon.contractid);
+                                            }
+                                        }
+
+                                    }
+                                }
+
+                            }
+                        }
+                    }
+                }
+
             }
         }
 
         private void Character_CharacterDied(IMyCharacter obj)
         {
-            BountyGrid bg = Bounties.Find(x => x.npc == obj);
-            if (bg != null)
+            /*
+            List<bountyData> bData = bounties.FindAll(x => x.targetid == obj.EntityId || x.characterid == obj.EntityId);
+            foreach (var item in bData)
             {
-                bg.TargetDied();
-
-                string insult = DeathGenerator.deaths[_random.Next(170)];
-                var values = bg.GetActiveContracts();
-                if (values != null)
-                {
-                    List<long> pid = new List<long>();
-                    foreach (var pair in values)
-                    {
-                        //Seems like custom conditions finish delegate doesn't work if a player
-                        //accepted a contract but didn't finish when server restarts.
-                        //so we will update it here as well.
-
-                        List<IMyPlayer> players = new List<IMyPlayer>();
-                        MyAPIGateway.Players.GetPlayers(players);
-                        IMyPlayer player = players.Find(x => x.IdentityId == pair.playerid);
-                        if (player != null)
-                        {
-
-                            if (MeasureDistance(player.GetPosition(), bg.GetCharacter().GetPosition()) <= 3000)
-                            {
-                                if(MyAPIGateway.ContractSystem.IsContractActive(pair.contractid))
-                                {
-                                    MyAPIGateway.Utilities.ShowMessage("Bounty", "Contract active");
-                                } else 
-                                {
-                                    MyAPIGateway.Utilities.ShowMessage("Bounty", "Contract not active");
-                                }
-                                MyAPIGateway.ContractSystem.TryFinishCustomContract(pair.contractid);
-                                
-                            }
-                            else
-                            {
-                                MyAPIGateway.ContractSystem.TryFailCustomContract(pair.contractid);
-                                
-                            }
-                        }
-
-                        if (!pid.Contains(pair.playerid))
-                        {
-                            pid.Add(pair.playerid);
-                        }
-
-
-
-                    }
-
-                    foreach (var item in pid)
-                    {
-                        
-                        MyVisualScriptLogicProvider.SendChatMessageColored(insult, Color.Red, obj.DisplayName, item);
-                        MyVisualScriptLogicProvider.ShowNotification(obj.DisplayName + " Died!", 5000, "White", item);
-                    }
-                }
-
+                //item.targetdead = true;
             }
-            delay = 0;
-        }
-
-
-
-        public bool CustomConditionFinish(long conditionId, long contractId)
-        {
-            BountyGrid bg = Bounties.Find(x => x.HasBountyId(contractId));
-            if (bg != null)
-            {
-                
-
-                if(bg.ConditionMet())
-                {
-                    contractData cd = bg.GetActiveContracts().Find(x => x.contractid == contractId);
-                    if (cd != null)
-                    {
-                        List<IMyPlayer> players = new List<IMyPlayer>();
-                        MyAPIGateway.Players.GetPlayers(players);
-                        IMyPlayer player = players.Find(x => x.IdentityId == cd.playerid);
-                        if(player!=null)
-                        {
-                                
-                            if (MeasureDistance(player.GetPosition(), bg.GetCharacter().GetPosition()) <= 3000)
-                            {
-                                MyAPIGateway.ContractSystem.TryFinishCustomContract(contractId);
-                                return true;
-                            } else
-                            {
-                                MyAPIGateway.ContractSystem.TryFailCustomContract(contractId);
-                                return false;
-                            }
-                        } 
-
-                    }
-                }
-                
-
-
-                //Do something cool here
-            }
-            delay = 0;
-            return false;
-                
-        }
-
-        private void ContractSystem_CustomConditionFinished(long conditionId, long contractId)
-        {
-            
-            BountyGrid bg = Bounties.Find(x => x.HasBountyId(contractId));
-            if (bg != null)
-            {
-                delay = 0;
-                //Do something cool here
-            }
+            */
         }
 
         private void ContractSystem_CustomCleanUp(long contractId)
         {
-            BountyGrid bg = Bounties.Find(x => x.HasBountyId(contractId));
-            if (bg != null)
-            {
-                //remove npc if dead. otherwise keep in game as a new bounty could be placed on them.
-                if(bg.ConditionMet())
-                {
-                    IMyFaction faction = MyAPIGateway.Session.Factions.TryGetPlayerFaction(bg.ownerid);
-                    if(faction != null)
-                    {
-                        MyAPIGateway.Session.Factions.KickMember(faction.FactionId, bg.ownerid);
-                    }
+            //MyAPIGateway.Utilities.ShowMessage("Bounty", "DO CONTRACT CLEANUP");
 
-                    delay = 0;
-                }
-                
-            }
-        }
+            List<bountyData> bData = bounties.FindAll(b => b.contracts.FindAll(bb => bb.contractid == contractId).Count > 0);
 
-        private void ContractSystem_CustomTimeRanOut(long contractId)
-        {
-            BountyGrid bg = Bounties.Find(x => x.HasBountyId(contractId));
-            if (bg != null)
-            {
-                string targetname = MyVisualScriptLogicProvider.GetPlayersName(bg.ownerid);
-                contractData cd = bg.GetActiveContracts().Find(x => x.contractid == contractId);
-                if(cd != null)
-                {
-                    if (bg.GetGPS() != null)
-                        MyAPIGateway.Session.GPS.RemoveGps(cd.playerid, bg.GetGPS());
+            bounties.RemoveAll(old => bData.Contains(old));
+            MyAPIGateway.ContractSystem.RemoveContract(contractId);
+            bSaveFlag = true;
 
-                        MyVisualScriptLogicProvider.ShowNotification("Bounty Failed " + targetname + " got away.", 5000, "Red", cd.playerid);
-                }
-                delay = 0;
-            }
-        }
 
-        private void ContractSystem_CustomFailFor(long contractId, long identityId, bool isAbandon)
-        {
-            BountyGrid bg = Bounties.Find(x => x.HasBountyId(contractId));
-            if (bg != null)
-            {
-                if (bg.GetGPS() != null)
-                {
-                    MyAPIGateway.Session.GPS.RemoveGps(identityId, bg.GetGPS());
-                }
-                string targetname = MyVisualScriptLogicProvider.GetPlayersName(bg.ownerid);
-                MyVisualScriptLogicProvider.ShowNotification("Bounty Failed "+targetname + " has been killed by someone else.", 5000, "Red", identityId);
-
-            }
-        }
-
-        public bool UpdateContract(long contractId)
-        {
-            //set some stuff in the class fields to change this
-            BountyGrid bg = Bounties.Find(x => x.HasBountyId(contractId));
-            if (bg != null)
-            {
-
-                
-            }
-            return true;
-        }
-
-        private void ContractSystem_CustomUpdate(long contractId, MyCustomContractStateEnum newState, MyTimeSpan currentTime)
-        {
-
-            BountyGrid bg = Bounties.Find(x => x.HasBountyId(contractId));
-            if (bg != null)
-            {
-                    if (bg.ConditionMet())
-                    {
-                        contractData cd = bg.GetActiveContracts().Find(x => x.contractid == contractId);
-                        if (cd != null)
-                        {
-                            List<IMyPlayer> players = new List<IMyPlayer>();
-                            MyAPIGateway.Players.GetPlayers(players);
-                            IMyPlayer player = players.Find(x => x.IdentityId == cd.playerid);
-                            if (player != null)
-                            {
-                                
-                                if (MeasureDistance(player.GetPosition(), bg.GetCharacter().GetPosition()) <= 3000)
-                                {
-                                    MyAPIGateway.ContractSystem.TryFinishCustomContract(contractId);
-
-                                }
-                                else
-                                {
-                                    MyAPIGateway.ContractSystem.TryFailCustomContract(contractId);
-                                }
-                            }
-                            else
-                            {
-                                MyAPIGateway.ContractSystem.RemoveContract(contractId);
-                            }
-
-                        }
-                    }
-                }
-                //Do something cool here
-            
-        }
-
-        private void ContractSystem_CustomActivateContract(long contractId, long identityId)
-        {
-            BountyGrid bg = Bounties.Find(x => x.HasBountyId(contractId));
-            if (bg != null)
-            {
-                bg.PlayerAccepted(identityId,contractId);
-                string activecontracts = MyAPIGateway.Utilities.SerializeToXML(bg.GetActiveContracts());
-                MyVisualScriptLogicProvider.StoreEntityString(bg.targetgrid.Name, "ActiveBounties", activecontracts);
-                if(bg.GetGPS()!=null)
-                {
-                    string name = MyVisualScriptLogicProvider.GetPlayersName(bg.ownerid);
-                    Vector3D shippos = bg.targetgrid.GetPosition();
-                    Vector3D pos = new Vector3D(shippos.X + _random.Next(0, 500), shippos.Y + _random.Next(0, 600), shippos.Z + _random.Next(0, 500));
-                    IMyGps gps = MyAPIGateway.Session.GPS.Create("Last Known Coordinates: " + name, "An anonymous tip came in saying they were spotted in the vicinity.", pos, true);
-                    gps.GPSColor = Color.Crimson;
-                    bg.SetGPS(gps);
-                }
-                if (bg.GetGPS() != null)
-                {
-                    MyAPIGateway.Session.GPS.AddGps(identityId, bg.GetGPS());
-                }
-
-            }
         }
 
         private void ContractSystem_CustomFail(long contractId)
         {
-            BountyGrid bg = Bounties.Find(x => x.HasBountyId(contractId));
-            if (bg != null)
-            {
-                
-                //Do something cool here
-            }
+            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Contract Failed");
         }
 
-        private void ContractSystem_CustomFinishFor(long contractId, long identityId, int rewardeeCount)
+        private void ContractSystem_CustomFailFor(long contractId, long identityId, bool isAbandon)
         {
-            BountyGrid bg = Bounties.Find(x => x.HasBountyId(contractId));
-            if (bg != null)
+            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Contract Failed:  cid: " + contractId+" abandon: "+ isAbandon.ToString());
+            foreach (var bData in bounties)
             {
-                string pname = MyVisualScriptLogicProvider.GetPlayersName(bg.ownerid);
-                long pid = bg.GetContractPlayer(contractId);
-                string oname = MyVisualScriptLogicProvider.GetPlayersName(identityId);
-                MyVisualScriptLogicProvider.ShowNotification("Bounty for " + pname + " Completed!", 5000, "Green", pid);
-                MyAPIGateway.Session.GPS.RemoveGps(identityId, bg.GetGPS());
-                delay = 0;
-                //Do something cool here
-                /*
-                List<contractData> data = bg.GetActiveContracts();
-                if (data != null)
+                activeContract acon = bData.activeContracts.Find(y => y.contractid == contractId && y.playerid == identityId);
+                if(acon != null)
                 {
-                    var playerList = new List<IMyPlayer>();
-                    MyAPIGateway.Players.GetPlayers(playerList);
-
-                    foreach (contractData contract in data)
+                    PlayerQuest quest = questManager.quests.Find(x => x.playerID == identityId && x.questid == contractId);
+                    if (quest != null)
                     {
-                        if (contract.playerid != identityId)
+                        quest.completed = true;
+                        if (isAbandon)
                         {
-                            foreach (var player in playerList)
-                            {
-                                if(player.PlayerID==contract.playerid)
-                                {
-                                    if(MeasureDistance(player.GetPosition(), bg.GetGPS().Coords)<5000)
-                                    {
-                                        MyAPIGateway.ContractSystem.TryFinishCustomContract(contract.contractid);
-                                    } else
-                                    {
-                                        MyAPIGateway.ContractSystem.TryFailCustomContract(contract.contractid);
-                                        bg.RemoveContract(contract.contractid, oname);
-                                    }
-                                }
-                            }
-                            
-                            
+
+                            MyVisualScriptLogicProvider.ReplaceQuestlogDetail(quest.questDetail, "- Abandoned -", false, identityId);
+
+                        }
+                        else
+                        {
+                            MyVisualScriptLogicProvider.ReplaceQuestlogDetail(quest.questDetail, " - Failed - ", false, identityId);
+                            MyVisualScriptLogicProvider.SetQuestlogDetailCompleted(quest.questDetail, true, identityId);
                             
                         }
 
                     }
                 }
-                */
             }
         }
 
         private void ContractSystem_CustomFinish(long contractId)
         {
-            BountyGrid bg = Bounties.Find(x => x.HasBountyId(contractId));
-            if (bg != null)
+            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Contract Finished:  cid: " + contractId);
+            
+        }
+
+        private void ContractSystem_CustomFinishFor(long contractId, long identityId, int rewardeeCount)
+        {
+            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Contract Finished:  cid: " + contractId + " rewardees" + rewardeeCount);
+
+            foreach (var bData in bounties)
             {
-                //remove unaccepted contracts on npc
-                bg.RemoveUnaccepted();
+                activeContract acon = bData.activeContracts.Find(y => y.contractid == contractId && y.playerid == identityId);
+                if(acon!=null)
+                {
+                    PlayerQuest quest = questManager.quests.Find(x => x.playerID == identityId && x.questid == contractId);
+                    if (quest != null)
+                    {
+                        int rewardAmount = bData.reward;
+                        string bonus = "";
+                        if(acon.bonus)
+                        {
+                            bonus = "Kill Bonus: "+(int)(bData.reward * 0.25);
+                        }
+                        MyVisualScriptLogicProvider.ReplaceQuestlogDetail(quest.questDetail, "Target Destroyed - Reward: "+ rewardAmount+" Credits "+ bonus, true, identityId);
+                        MyVisualScriptLogicProvider.SetQuestlogDetailCompleted(quest.questDetail,true,identityId);
+                        quest.completed = true;
+                        //questManager.quests.Remove(quest);
+                    }
+                    IMyGps gps = MyAPIGateway.Session.GPS.GetGpsList(identityId).Find(g => g.Hash == acon.gpsHash);
+                    if(gps!=null)
+                    {
+                        MyAPIGateway.Session.GPS.RemoveGps(identityId, gps);
+                    }
+                    
+                    if(acon.bonus)
+                    {
+                        List<IMyPlayer> players = new List<IMyPlayer>();
+                        MyAPIGateway.Players.GetPlayers(players);
+                        IMyPlayer player = players.Find(p => p.PlayerID == acon.playerid);
+                        if(player!=null)
+                        {
+                            player.RequestChangeBalance((long)(bData.reward * 0.25));
+                        }
+                        
+                    }
+                    
+                    
+                }
+                
+            }
+
+
+        }
+
+        public bool CustomConditionFinish(long contractId, long conditionId)
+        {
+            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Condition Finish Check:  cid: " + contractId + " condition" + conditionId);
+
+            foreach (var bData in bounties)
+            {
+                activeContract acon = bData.activeContracts.Find(x => x.contractid == contractId);
+                if (acon != null)
+                {
+                    if (bData.targetdead)
+                    {
+                        //MyAPIGateway.Utilities.ShowMessage("Bounty", "Condition Finished");
+                        
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private void ContractSystem_CustomConditionFinished(long conditionId, long contractId)
+        {
+            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Condition was Finished");
+        }
+
+        private void ContractSystem_CustomTimeRanOut(long contractId)
+        {
+            foreach (var bData in bounties)
+            {
+                activeContract acon = bData.activeContracts.Find(x => x.contractid == contractId);
+                if(acon != null)
+                {
+                    //notify player that time ran out
+                    IMyEntity ent = MyAPIGateway.Entities.GetEntityById(acon.entityid);
+                    MyVisualScriptLogicProvider.ShowNotification("Bounty Failed. " + ent.DisplayName + " got away.", 5000, "Red", acon.playerid);
+                    IMyGps gps = MyAPIGateway.Session.GPS.GetGpsList(acon.playerid).Find(x => x.Hash == acon.gpsHash);
+                    if (gps != null)
+                    {
+                        MyAPIGateway.Session.GPS.RemoveGps(acon.playerid, gps);
+                    }
+                    PlayerQuest quest = questManager.quests.Find(x => x.playerID == acon.playerid && x.questid == contractId);
+                    if (quest != null)
+                    {
+
+                        
+                        MyVisualScriptLogicProvider.ReplaceQuestlogDetail(quest.questDetail, " - Time Expired - ", false, acon.playerid);
+                        MyVisualScriptLogicProvider.SetQuestlogDetailCompleted(quest.questDetail, true, acon.playerid);
+
+                        
+
+                    }
+                }
             }
         }
 
+        public bool UpdateContract(long contractId)
+        {           
+            return true;
+        }
 
+        private void ContractSystem_CustomUpdate(long contractId, MyCustomContractStateEnum newState, MyTimeSpan currentTime)
+        {
+            foreach (var bData in bounties)
+            {
+                activeContract acon = bData.activeContracts.Find(x => x.contractid == contractId);
+                if (acon != null)
+                {
+                    //notify player that time ran out
+                    IMyEntity ent = MyAPIGateway.Entities.GetEntityById(acon.entityid);
+                    //MyAPIGateway.Utilities.ShowMessage("Bounty", "Custom Update:  "+ newState.ToString());
+
+
+
+
+
+                }
+            }
+        }
+
+        public MyActivationCustomResults ActivationResults(long a, long b)
+        {
+            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Activate Results? ID: " + a + " indentityId" + b);
+
+            //check how many contracts character has
+            int bcount = 0;
+            foreach(var bounty in bounties)
+            {
+                if(!bounty.targetdead)
+                    bcount += bounty.activeContracts.FindAll(bb => bb.playerid == b).Count;
+            }
+            if(bcount >= MAXBOUNTIESPERCHARACTER)
+            {
+                MyVisualScriptLogicProvider.ShowNotification("Can only have "+ MAXBOUNTIESPERCHARACTER + " active contracts at a time!", 5000, "Red", b);
+                return MyActivationCustomResults.Error_General;
+            }
+            else
+            {
+                return MyActivationCustomResults.Success;
+            }
+
+            
+        }
+
+        private void ContractSystem_CustomActivateContract(long contractId, long identityId)
+        {
+            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Activate Contract ID: "+contractId+" indentityId"+ identityId);
+
+            foreach (var bData in bounties)
+            {
+                contract con = bData.contracts.Find(x => x.contractid == contractId);
+                if (con != null)
+                {
+                    
+                    IMyEntity ent = MyAPIGateway.Entities.GetEntityById(bData.targetid);
+                    //MyAPIGateway.Utilities.ShowMessage("Bounty", "Activation:  cid: " + contractId + " cond: " + identityId+ "ent: "+ con.entityid);                                     
+                    activeContract acon = new activeContract(identityId, contractId, con.conditionid, bData.targetid);                    
+                    Vector3D shippos = ent.GetPosition();
+                    Vector3D pos = new Vector3D(shippos.X + _random.Next(0, 500), shippos.Y + _random.Next(0, 600), shippos.Z + _random.Next(0, 500));
+                    IMyGps gps = MyAPIGateway.Session.GPS.Create("Last Known Coordinates: " + bData.name, "An anonymous tip came in saying they were spotted in the vicinity.", pos, true);
+                    gps.GPSColor = Color.Crimson;
+                    acon.gpsHash = gps.Hash;                    
+                    MyAPIGateway.Session.GPS.AddGps(identityId, gps);
+                    PlayerQuest quest = new PlayerQuest();
+                    quest.questName = "Bounty - " + bData.name;
+                    quest.questid = contractId;
+                    quest.playerID = identityId;                    
+                    MyVisualScriptLogicProvider.SetQuestlogTitle("Bounty - "+ bData.name, identityId);
+                    MyVisualScriptLogicProvider.SetQuestlog(true, quest.questName, identityId);
+                    quest.objective = "Seek out and Kill " + bData.name;
+                    quest.questObjective = MyVisualScriptLogicProvider.AddQuestlogObjective(quest.objective, false, false, identityId);
+                    quest.questdesc = bData.desc;
+                    quest.questDetail = MyVisualScriptLogicProvider.AddQuestlogDetail(quest.questdesc, false,true, identityId);
+                    //MyVisualScriptLogicProvider.SetQuestlog(true, quest.questName, identityId);
+                    
+                    MyVisualScriptLogicProvider.SetQuestlogVisible(true, identityId);
+                    questManager.quests.Add(quest);
+                    bSaveFlag = true;
+                    //MyAPIGateway.Utilities.ShowMissionScreen("Bounty","Assassinate Target","Seek out and Kill "+ent.DisplayName,)
+                    bData.activeContracts.Add(acon);
+                    return;
+                }
+            }
+        }
+
+        private void Bountygrid_OnGridSplit(IMyCubeGrid arg1, IMyCubeGrid arg2)
+        {
+
+        }
+
+        private void Grid_OnBlockAdded(IMySlimBlock obj)
+        {
+            var fat = obj.FatBlock;
+            if (obj.BlockDefinition.Id.SubtypeName.Equals("ContractBlock"))
+            {
+                if (fat as IMyFunctionalBlock != null)
+                {
+                    IMyFunctionalBlock fb = fat as IMyFunctionalBlock;
+                    if (fb != null)
+                    {
+                        IMyFaction faction = MyAPIGateway.Session.Factions.TryGetFactionByTag(fat.GetOwnerFactionTag());
+                        if(faction != null)
+                        {
+                            ContractBlock cb = new ContractBlock(fb, faction, fb.CubeGrid);
+                            contractBlocks.Add(cb);
+                        }
+                    }
+
+
+                }
+            }
+        }
+
+        private void Grid_OnBlockRemoved(IMySlimBlock obj)
+        {
+            var fat = obj.FatBlock;
+            if (obj.BlockDefinition.Id.SubtypeName.Equals("ContractBlock"))
+            {
+                if (fat as IMyFunctionalBlock != null)
+                {
+                    IMyFunctionalBlock fb = fat as IMyFunctionalBlock;
+                    if (fb != null)
+                    {
+                        ContractBlock cb = contractBlocks.Find(x => x.contractBlock.EntityId == fb.EntityId);
+                        if (cb != null)
+                            contractBlocks.Remove(cb);
+                    }
+
+
+                }
+            }
+        }
+
+        #endregion
+
+        #region CheckFunctions
+
+        public void CheckGrid(IMyEntity entity)
+        {
+            CheckNewGrid(entity);
+        }
+
+        ///<summary>
+        ///Get all the contract blocks in <paramref name="entity"/>
+        ///</summary>
+        ///<param name="entity">entity to check</param>
+        ///<returns><c>true</c> If entity was a grid</returns>
+        public bool CheckNewGrid(IMyEntity entity)
+        {
+            if (entity as IMyCubeGrid != null)
+            {
+                var grid = entity as IMyCubeGrid;
+
+                if (grid == null)
+                {
+                    return false;
+                }
+
+                //make sure this isn't a projection
+                if (grid.Transparent)
+                {
+                    return false;
+                }
+                
+                grid.OnBlockRemoved += Grid_OnBlockRemoved;
+                grid.OnBlockAdded += Grid_OnBlockAdded;
+                //MyAPIGateway.Utilities.ShowMessage("Bounty", "Find Contract Blocks in "+ grid.DisplayName);
+                List<IMyFunctionalBlock> cBlocks = GetContractBlocks(entity);
+
+                foreach (IMyFunctionalBlock block in cBlocks)
+                {
+                    ContractBlock cblock = contractBlocks.Find(x => x.contractBlock.EntityId == block.EntityId);
+                    //add it if we don't have it
+                    if (cblock == null)
+                    {
+                        string faction = MyVisualScriptLogicProvider.GetPlayersFactionName(grid.BigOwners[0]);
+                        IMyFaction gridfaction = MyAPIGateway.Session.Factions.TryGetFactionByName(faction);
+                        if(gridfaction != null)
+                        {
+                            contractBlocks.Add(new ContractBlock(block, gridfaction, grid));
+                        }
+                        
+                    } else
+                    {
+                        //do we have the grid and or faction data?                       
+                        cblock.contractBlock = block;
+                        cblock.parentGrid = grid;
+                        string faction = MyVisualScriptLogicProvider.GetPlayersFactionName(grid.BigOwners[0]);
+                        IMyFaction gridfaction = MyAPIGateway.Session.Factions.TryGetFactionByName(faction);
+                        if (gridfaction != null)
+                        {
+                            cblock.faction = gridfaction;
+                        }
+                    }
+                }
+                return true;
+            }
+            return false;
+        }
+
+
+
+        ///<summary>
+        ///Removes contract blocks when this grid is removed <paramref name="entity"/>
+        ///</summary>
+        ///<param name="entity">entity to check</param>
+        ///<returns><c>void</c></returns>
+        public void ProcessRemovedGrid(IMyEntity entity)
+        {
+            if (entity as IMyCubeGrid != null)
+            {
+                var grid = entity as IMyCubeGrid;
+
+                if (grid == null)
+                {
+                    return;
+                }
+
+                //make sure this isn't a projection
+                if (grid.Transparent)
+                {
+                    return;
+                }
+
+                List<IMyFunctionalBlock> cBlocks = GetContractBlocks(entity);
+                foreach (IMyFunctionalBlock block in cBlocks)
+                {
+                    ContractBlock cblock = contractBlocks.Find(x => x.contractBlock.EntityId == block.EntityId);
+                    //remove entry if we have it.
+                    if(cblock != null)
+                    {
+                        contractBlocks.Remove(cblock);
+                    }
+                }
+            }
+        }
+
+        public void CheckCharacter(IMyEntity entity)
+        {
+            CheckIsCharacter(entity);
+        }
+        
+        ///<summary>
+        ///Checks if <paramref name="entity"/> is a character
+        ///</summary>
+        ///<param name="entity">entity to check</param>
+        ///<returns><c>true</c> if entitry was a character</returns>
+        public bool CheckIsCharacter(IMyEntity entity)
+        {
+            if (entity as IMyCharacter != null)
+            {
+                var character = entity as IMyCharacter;
+
+                if (character == null)
+                {
+                    return false;
+                }
+                if (character.IsPlayer)
+                {
+                    return true;
+                }
+
+                //check if this character is dead.
+                if (character.IsDead)
+                {
+
+                    //remove this character
+                    List<IMyPlayer> players = new List<IMyPlayer>();
+                    MyAPIGateway.Players.GetPlayers(players);
+                    IMyPlayer player = players.Find(x => x.Character == character);
+                    if (player != null)
+                    {
+                        string faction = MyVisualScriptLogicProvider.GetPlayersFactionName(player.IdentityId);
+                        IMyFaction gridfaction = MyAPIGateway.Session.Factions.TryGetFactionByName(faction);
+                        if (gridfaction != null)
+                        {
+                            if (gridfaction.FounderId != player.IdentityId)
+                            {
+                                MyAPIGateway.Session.Factions.KickMember(gridfaction.FactionId, player.IdentityId);
+                            }
+
+                        }
+                    }
+                    //remove any contracts tied to this character
+                    removeContract(character.EntityId);
+                    //remove from character list if we have it
+                    Character mychar = myCharacters.Find(x => x.character.EntityId == character.EntityId);
+                    if(mychar != null)
+                    {
+                        myCharacters.Remove(mychar);
+                    }
+                    character.Delete();
+
+                }
+                else
+                {
+                    //check if we already have this character
+                    Character mychar = myCharacters.Find(x => x.character.EntityId == character.EntityId);
+                    //if we cant find it then add it
+                    if(mychar == null)
+                        myCharacters.Add(new Character(character));
+                }
+                return true;
+
+            }
+            return false;
+        }
+
+
+        #endregion
+
+        #region UpdateFunctions
+
+        ///<summary>
+        ///Updates Factions list but removes player factions.
+        ///</summary>
+        public void UpdateFactions()
+        {
+            factions.Clear();
+            Dictionary<long, IMyFaction> f = MyAPIGateway.Session.Factions.Factions;
+            foreach (var faction in f)
+            {
+                if(faction.Value.IsEveryoneNpc())
+                {
+                    factions.Add(faction.Key, faction.Value);
+                }
+            }
+        }
+
+        #endregion
+
+        #region GetObjectFunctions
+
+        public List<characterData> GetCharacterData(List<Character> characters)
+        {
+            List<characterData> charData = new List<characterData>();
+            foreach (var character in characters)
+            {
+                if (character.character == null) continue;
+                characterData cdata = new characterData();
+                cdata.characterid = character.character.EntityId;
+                if (character.characterGrid != null)
+                {
+                    cdata.gridid = character.characterGrid.EntityId;
+                }
+            }
+
+            return charData;
+        }
+
+        public List<IMyFaction> GetEnemyFactions(IMyFaction afaction)
+        {
+            List<IMyFaction> enemyfactions = new List<IMyFaction>();
+
+            foreach (var faction in factions)
+            {
+                if (faction.Value.FactionId == afaction.FactionId)
+                    continue;
+
+                if(MyAPIGateway.Session.Factions.GetReputationBetweenFactions(faction.Value.FactionId, afaction.FactionId) < 0)
+                {
+                    enemyfactions.Add(faction.Value);
+                }
+            }
+
+            return enemyfactions;
+        }
+
+        public IMyRemoteControl GetRemoteControlBlock(IMyCubeGrid grid)
+        {
+            IMyRemoteControl remote = null;
+            List<IMySlimBlock> blocks = new List<IMySlimBlock>();
+            grid.GetBlocks(blocks);
+            foreach (IMySlimBlock block in blocks)
+            {
+                if (block != null)
+                {
+                    var fat = block.FatBlock;
+                    if (fat != null)
+                    {
+                        if (fat as IMyRemoteControl != null)
+                        {
+                            remote = fat as IMyRemoteControl;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            return remote;
+        }
+
+        public IMyCockpit GetCockpitBlock(IMyCubeGrid grid)
+        {
+            IMyCockpit cockpit = null;
+            List<IMySlimBlock> blocks = new List<IMySlimBlock>();
+            grid.GetBlocks(blocks);
+            foreach (IMySlimBlock block in blocks)
+            {
+                if (block != null)
+                {
+                    var fat = block.FatBlock;
+                    if (fat != null)
+                    {
+                        if (fat as IMyCockpit != null)
+                        {
+                            cockpit = fat as IMyCockpit;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            return cockpit;
+        }
+
+        public IMyCubeGrid GetLargestGrid(List<IMyCubeGrid> grids)
+        {
+            IMyCubeGrid largestgrid = null;
+            int size = 0;
+            foreach (IMyCubeGrid grid in grids)
+            {
+                List<IMySlimBlock> blocks = new List<IMySlimBlock>();
+                grid.GetBlocks(blocks);
+                if (blocks.Count > size)
+                {
+                    largestgrid = grid;
+                    size = blocks.Count;
+                }
+            }
+            return largestgrid;
+        }
 
         public List<IMyFunctionalBlock> GetContractBlocks(IMyEntity entity)
         {
@@ -560,10 +1413,11 @@ namespace RazMods
                 {
                     if (block != null)
                     {
-
+                        
                         var fat = block.FatBlock;
                         if (fat != null)
                         {
+                            
                             if (block.BlockDefinition.Id.SubtypeName.Equals("ContractBlock"))
                             {
                                 if (fat as IMyFunctionalBlock != null)
@@ -571,6 +1425,7 @@ namespace RazMods
                                     IMyFunctionalBlock fb = fat as IMyFunctionalBlock;
                                     if (fb != null)
                                     {
+                                        
                                         cblock.Add(fb);
                                     }
 
@@ -581,12 +1436,54 @@ namespace RazMods
                     }
                 }
             }
-            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Found " + cblock.Count + " Contract Blocks");
             return cblock;
         }
 
+        #endregion
 
-        double MeasureDistance(Vector3D coordsStart, Vector3D coordsEnd)
+        #region ContractFunctions
+
+        public void removeContract(long entitiyid)
+        {
+
+            foreach (bountyData bounty in bounties)
+            {
+                List<activeContract> acont = bounty.activeContracts.FindAll(y => y.entityid == entitiyid);
+                if (acont != null)
+                {
+                    activeContract[] ac = acont.ToArray();
+
+                    foreach (activeContract contract in ac)
+                    {
+                        MyAPIGateway.ContractSystem.TryFailCustomContract(contract.contractid);
+                        MyAPIGateway.ContractSystem.RemoveContract(contract.contractid);
+                        acont.Remove(contract);
+                    }
+
+                }
+                List<contract> cont = bounty.contracts.FindAll(x => x.entityid == entitiyid);
+                if (cont != null)
+                {
+                    contract[] c = cont.ToArray();
+                    foreach (contract contract in c)
+                    {
+                        MyAPIGateway.ContractSystem.RemoveContract(contract.contractid);
+                        cont.Remove(contract);
+                    }
+                }
+            }
+            bSaveFlag = true;
+
+
+            
+        }
+
+        #endregion
+
+        #region UtilityFunctions
+
+
+        public static double MeasureDistance(Vector3D coordsStart, Vector3D coordsEnd)
         {
 
             double distance = Math.Round(Vector3D.Distance(coordsStart, coordsEnd), 2);
@@ -594,871 +1491,81 @@ namespace RazMods
 
         }
 
+        #endregion
 
-        public void CheckNewGrid(IMyEntity entity)
-        {
-            if (entity as IMyCubeGrid != null)
-            {
-                var grid = entity as IMyCubeGrid;
-
-                if (grid == null)
-                {
-                    return;
-                }
-                if(grid.Transparent)
-                {
-                    return;
-                }
-                //refresh factions
-                factions = MyAPIGateway.Session.Factions.Factions;
-                //append any contract blocks we might find
-
-                m_blocks.AddArray(GetContractBlocks(entity).ToArray());
-
-                AddPotentialBountyGrid(grid);
-                grid.OnBlockAdded += CheckBlockAdded;
-                grid.OnBlockRemoved += Grid_OnBlockRemoved;
-                
-                //AddBountyContracts(grid);
-                delay = 0;
-            }
-        }
-
-        private void Grid_OnBlockRemoved(IMySlimBlock block)
-        {
-            if (block != null)
-            {
-                var fat = block.FatBlock;
-                if (fat != null)
-                {
-                    if (block.BlockDefinition.Id.SubtypeName.Equals("ContractBlock"))
-                    {
-                        if (fat as IMyFunctionalBlock != null)
-                        {
-                            IMyFunctionalBlock fb = fat as IMyFunctionalBlock;
-                            if (fb != null)
-                            {
-                                m_blocks.Remove(fb);
-                            }
+    }
 
 
-                        }
-                    }
-                }
-            }
-        }
+    #region HelperClasses
 
-        private void CheckBlockAdded(IMySlimBlock block)
-        {
-            if(block!=null)
-            {
-                var fat = block.FatBlock;
-                if (fat != null)
-                {
-                    if (block.BlockDefinition.Id.SubtypeName.Equals("ContractBlock"))
-                    {
-                        if (fat as IMyFunctionalBlock != null)
-                        {
-                            IMyFunctionalBlock fb = fat as IMyFunctionalBlock;
-                            if (fb != null)
-                            {
-                                m_blocks.Add(fb);
-                            }
-
-
-                        }
-                    }
-                }
-            }
-        }
-
-        public bool TrySeatCharacter(IMyCubeGrid grid,IMyCharacter character)
-        {
-            List<IMySlimBlock> blocks = new List<IMySlimBlock>();
-            grid.GetBlocks(blocks);
-            foreach (IMySlimBlock block in blocks)
-            {
-                if (block != null)
-                {
-                    var fat = block.FatBlock;
-                    if (fat != null)
-                    {
-                        if (fat as IMyCockpit != null)
-                        {
-                            IMyCockpit cp = fat as IMyCockpit;
-                            if (cp != null)
-                            {
-                                if (cp.Pilot != null)
-                                    continue;
-                                character.SetPosition(cp.GetPosition());
-                                character.AimedPoint = cp.GetPosition();
-                                character.Use();
-                                cp.AttachPilot(character);
-
-                                if(cp.Pilot==character)
-                                    return true;
-                            }
-                        }
-                        if(fat as IMyCryoChamber != null)
-                        {
-                            IMyCryoChamber cc = fat as IMyCryoChamber;
-                            if(cc != null)
-                            {
-                                if (cc.Pilot != null)
-                                    continue;
-                                character.SetPosition(cc.GetPosition());
-                                character.AimedPoint = cc.GetPosition();
-                                character.Use();
-                                
-                                cc.AttachPilot(character);
-                                
-                                if(cc.Pilot==character)
-                                    return true;
-                            }
-                        }
-                        
-                    }
-                }
-            }
-            return false;
-        }
-
-        public IMyCockpit FindCockPit(IMyCubeGrid grid)
-        {
-            List<IMySlimBlock> blocks = new List<IMySlimBlock>();
-            grid.GetBlocks(blocks);
-            foreach(IMySlimBlock block in blocks)
-            {
-                if(block!=null)
-                {
-                    var fat = block.FatBlock;
-                    if (fat != null)
-                    {
-                        if (fat as IMyCockpit != null)
-                        {
-                            IMyCockpit cp = fat as IMyCockpit;
-                            return cp;
-                        }
-                    }
-                }
-            }
-            return null;
-        }
-
-        public void AddPotentialBountyGrid(IMyCubeGrid grid)
+    public class SpawnCallback
+    {
+        public Action action;
+        IMyFaction faction;
+        List<IMyCubeGrid> grids;
+        BountyHunter bountyHunter;
+        public SpawnCallback()
         {
 
-            if (grid == null)
-            {
-                return;
-            }
-            //ignore if we have this already
-            BountyGrid bg = Bounties.Find(x => x.targetgrid == grid);
-            if (bg != null)
-            {
-                if(bg.GetCharacter() != null)
-                {
-                    IMyCharacter c = bg.GetCharacter();
-                    if(c.Parent == null)
-                        TrySeatCharacter(grid, c);
-                }
-                //MyAPIGateway.Utilities.ShowMessage("Bounty", "Already Tracking " + grid.DisplayName);
-                return;
-            }
-
-
-            //ignore respawn grids, grids not in scene and economy grids
-            //if (!grid.IsRespawnGrid && !grid.DisplayName.Contains("economy"))
-            //{
-            //make sure grid has some kind of loot boxes
-            //if(grid.HasInventory)
-            //{
-            IMyCharacter character = null;
-            List<long> owners = grid.BigOwners;
-            if(owners != null)
-            {
-                if(owners.Count > 0)
-                {
-                    long owner = owners[0];
-                    List<IMyPlayer> players = new List<IMyPlayer>();
-                    MyAPIGateway.Players.GetPlayers(players);
-                    IMyPlayer player = players.Find(x => x.IdentityId == owner);
-
-                    if (player != null)
-                    {
-                        string charname = player.DisplayName;
-                        if (player.IsBot)
-                        {
-                            string faction = MyVisualScriptLogicProvider.GetPlayersFactionName(owner);
-                            IMyFaction gridfaction = MyAPIGateway.Session.Factions.TryGetFactionByName(faction);
-                            if (gridfaction != null)
-                            {
-                                bool isMale = true;
-                                //check and see if grid owner is faction owner
-                                if (gridfaction.FounderId == owner)
-                                {
-
-                                    //we don't dont want to add bounty to npc Founder
-                                    //make a new NPC
-                                    if (_random.Next(0, 1) == 1)
-                                    {
-                                        charname = NameGenerator.Generate(NameGenerator.Gender.Male);
-                                    }
-                                    else
-                                    {
-                                        isMale = false;
-                                        charname = NameGenerator.Generate(NameGenerator.Gender.Female);
-                                    }
-                                    //add new NPC
-
-                                    MyAPIGateway.Session.Factions.AddNewNPCToFaction(gridfaction.FactionId, charname);
-                                    var mems = gridfaction.Members;
-                                    foreach (var member in mems)
-                                    {
-                                        //member.Value.PlayerId
-
-                                        if (MyVisualScriptLogicProvider.GetPlayersName(member.Value.PlayerId).Equals(charname))
-                                        {
-                                            //give grid to new NPC
-                                            owner = member.Value.PlayerId;
-                                            grid.Physics.SetSpeeds(Vector3D.Zero, Vector3D.Zero);
-                                            grid.ChangeGridOwnership(owner, MyOwnershipShareModeEnum.Faction);
-                                            //Create an NPC character we can kill;
-                                            var pos = new MyPositionAndOrientation(grid.PositionComp.WorldAABB.Center + grid.WorldMatrix.Backward * 2.5, grid.WorldMatrix.Backward, grid.WorldMatrix.Up);
-                                            character = CreateNPCCharacter(owner, charname, pos, isMale);
-
-                                            bool seated = TrySeatCharacter(grid, character);
-                                            if (!seated)
-                                            {
-
-                                            }
-                                            character.CharacterDied += Character_CharacterDied;
-                                            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Created Character " + charname);
-                                            break;
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    character = player.Character;
-                                    if(character == null)
-                                    {
-                                        //check if there is a character entity with same name (maybe got disassociated from server reset.)
-                                        IMyEntity ent = null;
-                                        
-                                        MyAPIGateway.Entities.TryGetEntityByName(player.DisplayName, out ent);
-                                        if(ent != null)
-                                        {
-                                            if(ent as IMyCharacter != null)
-                                            {
-                                                character = (IMyCharacter)ent;
-                                                player.SpawnIntoCharacter(character);
-                                                character.CharacterDied += Character_CharacterDied;
-                                                //MyAPIGateway.Utilities.ShowMessage("Bounty", "Found Character " + character.DisplayName);
-                                            }
-                                        } else
-                                        {
-                                            var pos = new MyPositionAndOrientation(grid.PositionComp.WorldAABB.Center + grid.WorldMatrix.Backward * 2.5, grid.WorldMatrix.Backward, grid.WorldMatrix.Up);
-                                            character = CreateNPCCharacter(player.IdentityId, player.DisplayName, pos);
-                                            bool seated = TrySeatCharacter(grid, character);
-                                            if (!seated)
-                                            {
-
-                                            }
-                                            character.CharacterDied += Character_CharacterDied;
-                                            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Created Character " + character.DisplayName);
-                                            //need to make a character
-                                        }
-                                    }                                    
-                                }
-                            }
-                        }
-                        else
-                        {
-                            //Is a player
-                            character = player.Character;
-                            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Tracking " + character.DisplayName);
-
-                        }
-
-                        bg = new BountyGrid(grid, owner);
-                        if (character != null)
-                        {
-                            bg.SetCharacter(character);
-                        }
-                        //MyAPIGateway.Utilities.ShowMessage("Bounty", "Tracking: " + grid.DisplayName);
-                        Bounties.Add(bg);
-                    } else
-                    {
-                        string charname = MyVisualScriptLogicProvider.GetPlayersName(owner);
-                        string faction = MyVisualScriptLogicProvider.GetPlayersFactionName(owner);
-                        IMyFaction gridfaction = MyAPIGateway.Session.Factions.TryGetFactionByName(faction);
-                        if (gridfaction != null)
-                        {
-                            bool isMale = true;
-                            //check and see if grid owner is faction owner
-                            if (gridfaction.FounderId == owner)
-                            {
-
-                                //we don't dont want to add bounty to npc Founder
-                                //make a new NPC
-                                if (_random.Next(0, 1) == 1)
-                                {
-                                    charname = NameGenerator.Generate(NameGenerator.Gender.Male);
-                                }
-                                else
-                                {
-                                    isMale = false;
-                                    charname = NameGenerator.Generate(NameGenerator.Gender.Female);
-                                }
-                                //add new NPC
-
-                                MyAPIGateway.Session.Factions.AddNewNPCToFaction(gridfaction.FactionId, charname);
-                                var mems = gridfaction.Members;
-                                foreach (var member in mems)
-                                {
-                                    //member.Value.PlayerId
-
-                                    if (MyVisualScriptLogicProvider.GetPlayersName(member.Value.PlayerId).Equals(charname))
-                                    {
-                                        //give grid to new NPC
-                                        owner = member.Value.PlayerId;
-                                        grid.Physics.SetSpeeds(Vector3D.Zero, Vector3D.Zero);
-                                        grid.ChangeGridOwnership(owner, MyOwnershipShareModeEnum.Faction);
-                                        //Create an NPC character we can kill;
-                                        var pos = new MyPositionAndOrientation(grid.PositionComp.WorldAABB.Center + grid.WorldMatrix.Backward * 2.5, grid.WorldMatrix.Backward, grid.WorldMatrix.Up);
-                                        character = CreateNPCCharacter(owner, charname, pos, isMale);
-
-                                        bool seated = TrySeatCharacter(grid, character);
-                                        if (!seated)
-                                        {
-
-                                        }
-                                        character.CharacterDied += Character_CharacterDied;
-                                        //MyAPIGateway.Utilities.ShowMessage("Bounty", "Created Character " + charname);
-                                        break;
-                                    }
-                                }
-                            }
-                            else
-                            {                               
-                                if (character == null)
-                                {
-                                    //check if there is a character entity with same name (maybe got disassociated from server reset.)
-                                    IMyEntity ent = null;
-                                    charname = MyVisualScriptLogicProvider.GetPlayersName(owner);
-                                    MyAPIGateway.Entities.TryGetEntityByName(charname, out ent);
-                                    if (ent != null)
-                                    {
-                                        if (ent as IMyCharacter != null)
-                                        {
-                                            character = (IMyCharacter)ent;
-                                            character.CharacterDied += Character_CharacterDied;
-                                            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Found Character " + character.DisplayName);
-                                        }
-                                    }
-                                    else
-                                    {
-                                        var pos = new MyPositionAndOrientation(grid.PositionComp.WorldAABB.Center + grid.WorldMatrix.Backward * 2.5, grid.WorldMatrix.Backward, grid.WorldMatrix.Up);
-                                        character = CreateNPCCharacter(owner, charname, pos);
-                                        bool seated = TrySeatCharacter(grid, character);
-                                        if (!seated)
-                                        {
-
-                                        }
-                                        character.CharacterDied += Character_CharacterDied;
-                                        //MyAPIGateway.Utilities.ShowMessage("Bounty", "Created Character " + character.DisplayName);
-                                        //need to make a character
-                                    }
-                                }
-                            }
-                            bg = new BountyGrid(grid, owner);
-                            if (character != null)
-                            {
-                                bg.SetCharacter(character);
-                            }
-                            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Tracking: " + grid.DisplayName);
-                            List<long> b = MyVisualScriptLogicProvider.LoadEntityLongList(bg.targetgrid.Name, "Bounties");
-                            string activecontracts = MyVisualScriptLogicProvider.LoadEntityString(bg.targetgrid.Name, "ActiveBounties");
-                            
-                            var acontracts = MyAPIGateway.Utilities.SerializeFromXML<List<contractData>>(activecontracts);
-
-                            if (acontracts != null)
-                            {
-                                //MyAPIGateway.Utilities.ShowMessage("Bounty", "Reloaded Active Contracts: " + acontracts.Count);
-                                bg.SetActiveContracts(acontracts);
-                            }
-                            if (b!= null)
-                            {
-                                bg.contracts = b;
-
-                            }
-                            BountyQueue.Add(bg);
-                            
-                        }
-                    }
-                }
-            }
-            //}
-            //}         
         }
 
-
-
-        public List<long> GetEnemyFactionContractBlocks(string fname)
+        public SpawnCallback(BountyHunter b, IMyFaction f)
         {
-            List<long> blockids = new List<long>();
-
-            foreach (var block in m_blocks)
-            {
-                if (MyVisualScriptLogicProvider.GetPlayersFactionName(block.OwnerId).Equals(fname))
-                {
-                    blockids.Add(block.EntityId);
-                }
-
-            }
-            return blockids;
+            bountyHunter = b;           
+            faction = f;
+            action = SetBounty;
         }
 
-        public List<long> GetContractBlocks()
+        public void SetList(List<IMyCubeGrid> g)
         {
-            List<long> blockids = new List<long>();
-
-            foreach (var block in m_blocks)
-            {
-
-                        blockids.Add(block.EntityId);
-
-            }
-
-            return blockids;
+            grids = g;
         }
 
-        public List<long> GetFactionContractBlocks(long factionid)
+        public void SetBounty()
         {
-            List<long> blockids = new List<long>();
-
-            foreach (var block in m_blocks)
-            {
-                IMyFaction f = MyAPIGateway.Session.Factions.TryGetPlayerFaction(block.OwnerId);
-                if (f != null)
-                {
-                    if (factionid == f.FactionId)
-                    {
-
-                        blockids.Add(block.EntityId);
-
-                    }
-
-                }
-
-
-            }
-
-            return blockids;
+            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Callback!");
+            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Spawned Grids Count: " + grids.Count);
+            bountyHunter.CreateBountyData(faction, grids);
         }
+    }
 
-        public List<long> GetEnemyFactionContractBlocks(long factionid)
-        {
-            List<long> blockids = new List<long>();
-
-            foreach (var block in m_blocks)
-            {
-                IMyFaction f = MyAPIGateway.Session.Factions.TryGetPlayerFaction(block.OwnerId);
-                if(f != null)
-                {
-                    if(MyAPIGateway.Session.Factions.AreFactionsEnemies(factionid, f.FactionId))
-                    {
-
-                        blockids.Add(block.EntityId);
-
-                    }
-                    
-                }
-                
-                
-            }
-
-            return blockids;
-        }
-
-        public bool IsPlayer(long id)
+    public class Character
+    {
+        public Character()
         {
 
-            List<IMyPlayer> players = new List<IMyPlayer>();
-            MyAPIGateway.Players.GetPlayers(players);
-            if (players.Count == 0)
-                return false;
-
-            IMyPlayer p = players.Find(x => x.IdentityId == id);
-            if (p != null)
-                return true;
-            return false;
         }
-
-        public IMyCharacter CreateNPCCharacter(long id, string name, MyPositionAndOrientation csys, bool isMale = true)
+        public Character(IMyCharacter c)
         {
-            string stype = "Default_Astronaut";
-            if(!isMale)
-            {
-                stype = "Default_Astronaut_Female";
-            }
-            var ob = new MyObjectBuilder_Character()
-            {
-                Name = name,
-                DisplayName = name,
-                SubtypeName = stype,
-                EntityId = 0,
-                AIMode = true,
-                JetpackEnabled = false,
-                EnableBroadcasting = true,
-                NeedsOxygenFromSuit = false,
-                OxygenLevel = 1,
-                MovementState = MyCharacterMovementEnum.Sitting,
-                PersistentFlags = MyPersistentEntityFlags2.InScene | MyPersistentEntityFlags2.Enabled,
-                PositionAndOrientation = csys,
-                Health = 1000,
-                OwningPlayerIdentityId = id,
-                ColorMaskHSV = new Vector3(_random.NextDouble(), _random.NextDouble(), _random.NextDouble()),            
-            };
-            var npc = MyEntities.CreateFromObjectBuilder(ob, true) as IMyCharacter;
-            if (npc != null)
-            {
-                MyEntities.Add((MyEntity)npc, true);
-            } else
-            {
-                //MyAPIGateway.Utilities.ShowMessage("Bounty", "Failed to create NPC.");
-            }
-            return npc;
+            character = c;
         }
-
-        public Dictionary<long, int> AddBounty(BountyGrid bgrid)
+        public Character(IMyCharacter c, IMyCubeGrid g)
         {
-            Dictionary<long,int> bountynotifications = new Dictionary<long,int>();
-            
-            //bounty is finished do not try to add
-            if (bgrid.ConditionMet())
-                return bountynotifications;
-
-            string faction = MyVisualScriptLogicProvider.GetPlayersFactionName(bgrid.ownerid);
-            IMyFaction gridfaction = MyAPIGateway.Session.Factions.TryGetFactionByName(faction);
-
-            if (gridfaction != null)
-            {
-                List<IMyFaction> enemies = GetEnemyFactions(gridfaction);
-
-                foreach (IMyFaction enemy in enemies)
-                {
-                    if(enemy != null)
-                    {
-                        //make sure there are contract blocks in the world
-                        List<long> blockids = GetContractBlocks();
-                        if (blockids.Count > 0)
-                        {
-                            foreach (var blockid in blockids)
-                            {
-                                //long id = MyAPIGateway.Players.TryGetIdentityId(MyAPIGateway.Multiplayer.ServerId);
-                                
-                                string name = MyVisualScriptLogicProvider.GetPlayersName(bgrid.ownerid);
-                                List<IMySlimBlock> blocks = new List<IMySlimBlock>();
-                                bgrid.targetgrid.GetBlocks(blocks);
-                                int reward = blocks.Count * 1000;
-                                var ent = MyVisualScriptLogicProvider.GetEntityById(blockid);
-                                if (ent as IMyCubeBlock != null)
-                                {
-                                    IMyCubeBlock storeblock = ent as IMyCubeBlock;
-                                    if (storeblock != null)
-                                    {
-                                        IMyFaction pfaction = MyAPIGateway.Session.Factions.TryGetPlayerFaction(storeblock.OwnerId);
-                                        if (pfaction != null)
-                                        {
-                                            int relation = MyAPIGateway.Session.Factions.GetReputationBetweenFactions(pfaction.FactionId, enemy.FactionId);
-                                            if (relation>=-500)
-                                            {
-                                                if (bgrid.ownerid != storeblock.OwnerId)
-                                                {
-                                                    if (bgrid.GetCharacter() != null)
-                                                    {
-                                                        if (!bgrid.GetCharacter().IsDead)
-                                                        {
-                                                            MyContractHunter hunter = new MyContractHunter(blockid, reward, 100, 60, bgrid.GetCharacter().EntityId);
-                                                            string enemyfounder = MyVisualScriptLogicProvider.GetPlayersName(enemy.FounderId);
-
-                                                            
-                                                            string desc = enemyfounder + " of " + enemy.Name + " has put out a bounty on " + name + " for their aggressive violence against it's members. They were last seen piloting a ship called " + bgrid.targetgrid.DisplayName + ". Please subdue them with excess force! ";
-                                                            hunter.SetDetails("Bounty Contract", desc, 200, 10);
-                                                            //so apparently.. it wont add a contract if you dont have the money for it. So we need to switch the faction on the block momentarily to the faction that is 
-                                                            //offering the bounty
-
-                                                            List<IMyPlayer> players = new List<IMyPlayer>();
-                                                            MyAPIGateway.Players.GetPlayers(players);
-                                                            IMyPlayer player = players.Find(x => x.IdentityId == storeblock.OwnerId);
-                                                            long oldbalance = 0;
-                                                            if(player!=null)
-                                                            {
-                                                                player.RequestChangeBalance(reward * 2);
-                                                            }
-                                                            MyAddContractResultWrapper cw = MyAPIGateway.ContractSystem.AddContract(hunter);
-
-                                                            if (cw.Success)
-                                                            {
-                                                                
-                                                                if(!bountynotifications.ContainsKey(storeblock.OwnerId))
-                                                                {
-                                                                    bountynotifications.Add(storeblock.OwnerId, 1);
-                                                                } else
-                                                                {
-                                                                    bountynotifications[storeblock.OwnerId]++;
-                                                                }
-                                                                //MyAPIGateway.Utilities.ShowMessage("Bounty", "Bounty Created for " + name);
-                                                                bgrid.AddBountyContract(cw.ContractId);
-                                                                MyAPIGateway.ContractSystem.GetContractDefinitionId(cw.ContractId);
-                                                                if (!bgrid.HasGPS())
-                                                                {
-                                                                    Vector3D shippos = bgrid.targetgrid.GetPosition();
-                                                                    Vector3D pos = new Vector3D(shippos.X + _random.Next(0, 500), shippos.Y + _random.Next(0, 600), shippos.Z + _random.Next(0, 500));
-                                                                    IMyGps gps = MyAPIGateway.Session.GPS.Create("Last Known Coordinates: " + name, "An anonymous tip came in saying they were spotted in the vicinity.", pos, true);
-                                                                    gps.GPSColor = Color.Crimson;
-                                                                    bgrid.SetGPS(gps);
-                                                                }
-                                                                //try to store contracts into ship
-
-                                                            }
-                                                            else
-                                                            {
-                                                                //MyAPIGateway.Utilities.ShowMessage("Bounty", "contract failed " + storeblock.CubeGrid.DisplayName+" for "+ bgrid.GetCharacter().DisplayName);
-                                                                if (bgrid.GetCharacter().IsDead)
-                                                                {
-                                                                    //MyAPIGateway.Utilities.ShowMessage("Bounty", "Dead.. " + name);
-                                                                }
-                                                            }
-                                                            if (player != null)
-                                                            {
-                                                                player.RequestChangeBalance(-(reward * 2));
-                                                            }
-                                                    }
-                                                    } 
-                                                    else
-                                                    {
-                                                        //Add character.
-
-                                                        
-                                                        bgrid.targetgrid.ChangeGridOwnership(bgrid.ownerid, MyOwnershipShareModeEnum.Faction);
-                                                        //Create an NPC character we can kill;
-                                                        var pos = new MyPositionAndOrientation(bgrid.targetgrid.PositionComp.WorldAABB.Center + bgrid.targetgrid.WorldMatrix.Backward * 2.5, (Vector3)bgrid.targetgrid.WorldMatrix.Backward, (Vector3)(Vector3)bgrid.targetgrid.WorldMatrix.Up);
-                                                        IMyCharacter character = CreateNPCCharacter(bgrid.ownerid, name, pos);
-                                                        List<IMyPlayer> _players = new List<IMyPlayer>();
-                                                        MyAPIGateway.Players.GetPlayers(_players);
-                                                        IMyPlayer player = _players.Find(x => x.IdentityId == bgrid.ownerid);
-                                                        if(player != null)
-                                                        {
-                                                            if(player.Character==null)
-                                                            {
-                                                                player.SpawnIntoCharacter(character);
-                                                                //MyAPIGateway.Utilities.ShowMessage("Bounty", "Spawned " + name);
-                                                            }
-                                                        }
-                                                        IMyCockpit cp = FindCockPit(bgrid.targetgrid);
-                                                        if (cp != null)
-                                                        {
-                                                            cp.AttachPilot(character);
-                                                        }
-                                                        bgrid.SetCharacter(character);
-                                                        character.CharacterDied += Character_CharacterDied;
-                                                        //MyAPIGateway.Utilities.ShowMessage("Bounty", "Grid has no Character" + name);
-                                                    }
-                                                }
-                                            } 
-                                        }
-                                    }
-
-                                } else
-                                {
-                                    
-                                    //MyAPIGateway.Utilities.ShowMessage("Bounty", "Store block error");
-                                }
-
-
-                            }
-                        }
-                    }
-                }
-            }
-            /*
-            if(bountyblocks.Count>0)
-            {
-                Dictionary<long, int> bountynotification = new Dictionary<long, int>();
-                foreach (var block in bountyblocks)
-                {
-                    if(!bountynotification.ContainsKey(block.OwnerId))
-                    {
-                        bountynotification.Add(block.OwnerId, 1);
-                    } else
-                    {
-                        bountynotification[block.OwnerId] += 1;
-                    }
-                    //MyAPIGateway.Utilities.ShowMessage("Bounty", "New Bounties Available at "+ block.CubeGrid.DisplayName);
-                }
-                foreach (var notify in bountynotification)
-                {
-                    MyVisualScriptLogicProvider.ShowNotification(notify.Value + " New Bounties Available!", 5000, "Green", notify.Key);
-                }
-                BountyQueue.Remove(bgrid);
-                Bounties.Add(bgrid);
-                return true;
-            }
-            */
-            BountyQueue.Remove(bgrid);
-            Bounties.Add(bgrid);
-            return bountynotifications;
+            character = c;
+            characterGrid = g;
         }
 
-        //var posOr = new MyPositionAndOrientation(_block.PositionComp.WorldAABB.Center + _block.WorldMatrix.Backward * 2.5, (Vector3)_block.WorldMatrix.Backward, (Vector3)(Vector3)_block.WorldMatrix.Up);
-        /*
-        public void AddBountyContracts(IMyCubeGrid grid)
+        public IMyCharacter character;
+        public IMyCubeGrid characterGrid;
+    }
+
+    public class ContractBlock
+    {
+        public ContractBlock()
         {
-            if (grid.BigOwners.Count > 0)
-            {
-                //get first big owner
-                long owner = grid.BigOwners[0];
-                List<IMySlimBlock> blocks = new List<IMySlimBlock>();
-                grid.GetBlocks(blocks);
-                string faction = MyVisualScriptLogicProvider.GetPlayersFactionName(owner);
-                IMyFaction gridfaction = MyAPIGateway.Session.Factions.TryGetFactionByName(faction);
-
-                if (gridfaction != null)
-                {
-                    List<IMyFaction> enemies = GetEnemyFactions(gridfaction);
-                    foreach (IMyFaction efaction in enemies)
-                    {
-                        if (efaction != null)
-                        {
-                            long contractid = 0;
-                            if (m_blocks.Count > 0)
-                            {
-                                List<long> bids = GetEnemyFactionContractBlocks(efaction.Name);
-                                if (bids.Count > 0)
-                                {
-                                    foreach (var cid in bids)
-                                    {
-                                        string npcname = MyVisualScriptLogicProvider.GetPlayersEntityName(owner);
-                                        if (!IsPlayer(owner))
-                                        {
-                                            if (gridfaction.FounderId == owner)
-                                            {
-
-                                                npcname = NameGenerator.Generate(NameGenerator.Gender.Male);
-                                                MyAPIGateway.Session.Factions.AddNewNPCToFaction(gridfaction.FactionId, npcname);
-                                                //MyAPIGateway.Utilities.ShowMessage("Bounty", "NPC Created : "+ npcname);
-                                                var mems = gridfaction.Members;
-                                                int i = 0;
-                                                
-                                                foreach (var member in mems)
-                                                {
-                                                    //member.Value.PlayerId
-
-                                                    if (MyVisualScriptLogicProvider.GetPlayersName(member.Value.PlayerId).Equals(npcname))
-                                                    {
-
-                                                        owner = member.Value.PlayerId;
-                                                        grid.ChangeGridOwnership(owner, MyOwnershipShareModeEnum.Faction);
-
-
-                                                        MyAPIGateway.Utilities.ShowMessage("Bounty", "NPC Created : " + npcname + " " + owner);
-                                                        var pos = new MyPositionAndOrientation(grid.PositionComp.WorldAABB.Center + grid.WorldMatrix.Backward * 2.5, (Vector3)grid.WorldMatrix.Backward, (Vector3)(Vector3)grid.WorldMatrix.Up);
-                                                        IMyCharacter character = CreateNPCCharacter(owner, npcname, pos);
-                                                    }
-
-                                                }
-                                                //
-
-                                                //
-
-                                                //owner = character.EntityId;
-
-                                            }
-
-                                        }
-                                        
-
-                                        MyContractBounty bounty = new MyContractBounty(cid, blocks.Count * 1000, 100, 60, owner);
-                                        
-                                        var cw = MyAPIGateway.ContractSystem.AddContract(bounty);
-                                        MyVisualScriptLogicProvider.AddBountyContract(cid, blocks.Count * 1000, 100, 60, owner, out contractid);
-                                        
-                                        if (cw.Success)
-                                        {
-                                            //MyEntity ent = MyVisualScriptLogicProvider.GetEntityById(cid);
-                                            
-                                            MyAPIGateway.Utilities.ShowMessage("Bounty", "Bounty Activated for "+ npcname);
-
-
-                                            BountyGrid bg = Bounties.Find(x => x.targetgrid == grid);
-                                            if (bg != null)
-                                            {
-                                                bg.AddBountyContract(contractid);
-                                                bg.UpdateBounty(blocks.Count * 100);
-                                            }
-                                            else
-                                            {
-                                                bg = new BountyGrid(grid);
-                                                bg.AddBountyContract(contractid);
-                                                bg.UpdateBounty(blocks.Count * 100);
-                                                Bounties.Add(bg);
-                                            }
-
-                                        } else
-                                        {
-                                            
-                                            MyAPIGateway.Utilities.ShowMessage("Bounty", "Bounty Failed : " + cid);
-                                        }
-
-
-                                    }
-
-                                }
-
-                            }
-                            //if bounty doesn't exist make it, otherwise add contract
-
-
-                            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Bounty Available on : "+grid.CustomName);
-
-                        }
-                    }
-                }
-            }
+           
         }
-        */
-        
-        public MyActivationCustomResults ActivationResults(long a, long b)
+
+        public ContractBlock(IMyFunctionalBlock cb, IMyFaction fact, IMyCubeGrid pg)
         {
-            //MyAPIGateway.Utilities.ShowMessage("Bounty", "Trying to accept contract : ");
-            return MyActivationCustomResults.Success;
+            contractBlock = cb;
+            faction = fact;
+            parentGrid = pg;
         }
 
-
-
- 
-
-        public List<IMyFaction> GetEnemyFactions(IMyFaction faction)
-        {
-            List<IMyFaction> enemyFactions = new List<IMyFaction>();
-            int enemycount = 0;
-            foreach (var item in factions)
-            {
-                
-                if (MyAPIGateway.Session.Factions.GetReputationBetweenFactions(faction.FactionId, item.Value.FactionId)<0)               
-                {
-                    enemyFactions.Add(item.Value);
-                    enemycount++;
-                }
-                if (enemycount > MAXBOUNTIESPERCHARACTER)
-                    break;
-            }
-
-            return enemyFactions;
-        }
+        public IMyFunctionalBlock contractBlock;
+        public IMyFaction faction;
+        public IMyCubeGrid parentGrid;
 
     }
 
@@ -1477,13 +1584,13 @@ namespace RazMods
 
         }
 
-        public void SetDetails(string name = "Bounty", string desc = "Kill Some dude",int rep = 0, int fail = 0)
+        public void SetDetails(string name = "Bounty", string desc = "Kill Some dude", int rep = 0, int fail = 0)
         {
             Name = name;
             Description = desc;
             ReputationReward = rep;
             FailReputationPrice = fail;
-          
+
         }
 
         public long TargetIdentityId
@@ -1572,212 +1679,118 @@ namespace RazMods
 
     }
 
-    [System.Serializable]
-    public class contractData
+    public enum BountyTargetType
     {
+        BLOCK = 0,
+        REMOTE = 1,
+        COCKPIT = 2,
+        CHARACTER = 1
+    }
+
+    #endregion
+
+
+    #region serializable classes
+
+    [System.Serializable]
+    public class QuestManager
+    {
+        public List<PlayerQuest> quests = new List<PlayerQuest>();
+    }
+
+    [System.Serializable]
+    public class PlayerQuest
+    {
+        public long playerID = 0;
+        public int questObjective = 0;
+        public int questDetail = 0;
+        public string questName = "";
+        public string objective = "";
+        public long questid = 0;
+        public bool completed = false;
+        public string questdesc = "";
+
+    }
+
+
+    [System.Serializable]
+    public class bountyData
+    {
+        public bountyData()
+        {
+
+        }
+
+        public bountyData(string bname, long fid)
+        {
+            name = bname;
+            factionid = fid;
+        }
+        public bool targetdead = false;
+        public string desc = "";
+        public string name = "Bounty";
+        public long factionid = 0;
+        public long placedfaction = 0;       
+        public long targetid = 0;
+        public BountyTargetType targettype = BountyTargetType.BLOCK;
+        public bool characterSpawned = false;
+        public long characterid = 0;
+        public long characterowner = 0;
+        public bool isMale = true;
+        public int reward = 0;
+        public List<contract> contracts = new List<contract>();
+        public List<activeContract> activeContracts = new List<activeContract>();
+    }
+
+
+    [System.Serializable]
+    public class characterData
+    {
+        public long characterid;
+        public long gridid;
+    }
+
+    [System.Serializable]
+    public class activeContract
+    {
+        public activeContract()
+        {
+
+        }
+
+        public activeContract(long pid,long cid,long conid,long entid)
+        {
+            playerid = pid;
+            contractid = cid;
+            conditionid = conid;
+            entityid = entid;
+        }
+
         public long playerid = 0;
         public long contractid = 0;
+        public long conditionid = 0;
+        public long entityid = 0;
+        public int gpsHash = 0;
+        public bool bonus = true;
     }
 
-    public class BountyGrid
+    [System.Serializable]
+    public class contract
     {
-        public IMyCubeGrid targetgrid = null;
-        public List<long> contracts = new List<long>();
-        public List<contractData> playersAccepted = new List<contractData>();
-        public IMyFaction faction = null;
-        public int bounty = 0;
-        public long ownerid = 0;
-        public IMyCharacter npc = null;
-        public bool isPlayer = false;
-        public bool isTargetAlive = true;
-        public bool conditionMet = false;
-        public long killedby = 0;
-        public IMyGps targetGPS = null;
-        public Vector3D deathlocation = Vector3D.Zero;
-        public double lastinsultTime = 0;
-
-        public Vector3D GetDeathLocation()
+        public contract()
         {
-            return deathlocation;
+
         }
 
-        
-
-        public void RemoveUnaccepted()
+        public contract(long ctid, long conid)
         {
-            long[] cons = contracts.ToArray();
-            for (int i = 0; i < cons.Length; i++)
-            {
-                contractData cd = playersAccepted.Find(x => x.contractid == cons[i]);
-                if(cd==null)
-                {
-                    contracts.Remove(cons[i]);
-                }
-            }
+            contractid = ctid;
+            conditionid = conid;
         }
-
-        public IMyGps GetGPS()
-        {
-            return targetGPS;
-        }
-
-        public void SetGPS(IMyGps gps)
-        {
-            targetGPS = gps;
-        }
-
-        public bool HasGPS()
-        {
-            if(targetGPS == null)
-            {
-                return false;
-            }
-            return true;
-        }
-
-        public IMyCharacter GetCharacter()
-        {
-            return npc;
-        }
-
-        public bool ConditionMet()
-        {
-            return conditionMet;
-        }
-
-        public void RemoveContract(long contract,string oname="Someone Else")
-        {
-            contractData cd = playersAccepted.Find(x => x.contractid == contract);
-            if (cd != null)
-            {
-                string pname = MyVisualScriptLogicProvider.GetPlayersName(ownerid);
-                MyVisualScriptLogicProvider.ShowNotification("Bounty for " + pname + " completed by "+ oname, 5000, "Red", cd.playerid);
-                playersAccepted.Remove(cd);
-            }
-            contracts.Remove(contract);
-            //MyAPIGateway.ContractSystem.TryFailCustomContract(contract);
-            MyAPIGateway.ContractSystem.RemoveContract(contract);
-            
-        }
-
-        public Dictionary<long,long> GetActiveContractsDictionary()
-        {
-            Dictionary<long,long> acontracts = new Dictionary<long,long>();
-            foreach (var item in playersAccepted)
-            {
-                acontracts.Add(item.contractid, item.playerid);
-            }
-            return acontracts;
-        }
-        public List<contractData> GetActiveContracts()
-        {
-            return playersAccepted;
-        }
-
-        public void SetActiveContracts(List<contractData> cd)
-        {
-            playersAccepted = cd;
-        }
-
-        public long GetContractPlayer(long contract)
-        {
-            contractData cd = playersAccepted.Find(x => x.contractid == contract);
-            if(cd != null)
-                return cd.playerid;
-            return 0;
-        }
-
-        public BountyGrid(IMyCubeGrid grid)
-        {
-            targetgrid = grid;
-        }
-
-        public BountyGrid(IMyCubeGrid grid,long owner)
-        {
-            targetgrid = grid;
-            ownerid = owner;
-        }
-
-        public void PlayerAccepted(long p,long c)
-        {
-            contractData cd = new contractData();
-            cd.playerid = p;
-            cd.contractid = c;
-            playersAccepted.Add(cd);
-        }
-
-        public void TargetDied()
-        {
-            isTargetAlive = false;
-            conditionMet = true;
-            deathlocation = npc.GetPosition();
-        }
-
-        public bool IsTargetAlive()
-        {
-            return !npc.IsDead;
-        }
-
-        public void SetCharacter(IMyCharacter c)
-        {
-            this.npc = c;
-        }
-
-        public void SetIsPlayer(bool p)
-        {
-            isPlayer = p;
-        }
-
-        public bool HasBounties()
-        {
-            if (contracts.Count > 0)
-                return true;
-            return false;
-        }
-
-        public int GetBountyValue()
-        {
-            return bounty;
-        }
-
-        public List<long> GetBounties()
-        {
-            return contracts;
-        }
-
-        public void UpdateBounty(int b)
-        {
-            bounty = b;
-            foreach (long c in contracts)
-            {
-
-            }
-        }
-
-        public bool HasBountyId(long contract)
-        {
-            if(contracts.Find(x => x == contract)!=0)
-                return true;
-            return false;
-        }
-
-        public void AddBountyContract(long contract)
-        {
-            contracts.Add(contract);
-        }
-
-        public long GetLastAttackerID()
-        {
-            return killedby;
-        }
-
-        public void SetLastAttackerID(long attackerId)
-        {
-            killedby = attackerId;
-        }
+        public long contractid = 0;
+        public long conditionid = 0;
+        public long entityid = 0;
     }
 
-
-
-    
+    #endregion
 }
