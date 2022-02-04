@@ -25,6 +25,7 @@ using VRage.Game.ObjectBuilders.Components.Contracts;
 using Sandbox.Game.World;
 using static VRage.Game.MyObjectBuilder_Checkpoint;
 using Sandbox.Definitions;
+using VRage.Utils;
 
 namespace RazMods
 {
@@ -33,7 +34,7 @@ namespace RazMods
     {
         #region vars
         Action<object, MyDamageInformation> destroyHandler;
-        Dictionary<long, IMyFaction> factions;
+        Dictionary<long, IMyFaction> factions = new Dictionary<long, IMyFaction>();
         BountySpawner bountySpawner;
         //Contract info
         List<bountyData> bounties = new List<bountyData>();
@@ -51,9 +52,9 @@ namespace RazMods
         ModItem thisMod;
         public static string modpath = "";
         const string bountySettingsFile = "BountyHunterSettings.xml";
-        const string NPCDataFile = "NPCData.xml";
-        const string bountyDataFile = "BountyData.xml";
-        const string questDataFile = "QuestData.xml";
+        public string NPCDataFile = "NPCData.xml";
+        public string bountyDataFile = "BountyData.xml";
+        public string questDataFile = "QuestData.xml";
         const string activeBountyDataFile = "ActiveBountyData.xml";
 
         //Server checks
@@ -75,8 +76,6 @@ namespace RazMods
 
         public override void UpdateBeforeSimulation()
         {
-            if (!bInitialized)
-                Init();
 
             if (!bIsServer)
                 return;
@@ -124,27 +123,7 @@ namespace RazMods
 
                 delay = 0;
             }
-            if(bSaveFlag)
-            {
-                string bountydata = MyAPIGateway.Utilities.SerializeToXML(bounties);
-                TextWriter tw = MyAPIGateway.Utilities.WriteFileInWorldStorage(bountyDataFile, typeof(string));
-                tw.Write(bountydata);
-                tw.Close();
 
-                List<characterData> characterdata = GetCharacterData(myCharacters);
-                string cdata = MyAPIGateway.Utilities.SerializeToXML(characterdata);
-                tw = MyAPIGateway.Utilities.WriteFileInWorldStorage(NPCDataFile, typeof(string));
-                tw.Write(cdata);
-                tw.Close();
-
-                
-                string qdata = MyAPIGateway.Utilities.SerializeToXML(questManager);
-                tw = MyAPIGateway.Utilities.WriteFileInWorldStorage(questDataFile, typeof(string));
-                tw.Write(qdata);
-                tw.Close();
-
-                bSaveFlag = false;
-            }
             base.UpdateBeforeSimulation();
         }
 
@@ -204,7 +183,7 @@ namespace RazMods
                 //MyAPIGateway.Utilities.ShowMessage("Bounty", "Check Spawned Grid");
                 if (bountygrid != null)
                 {
-
+                    bountygrid.Save = true;
                     List<IMySlimBlock> blocks = new List<IMySlimBlock>();
                     bountygrid.GetBlocks(blocks);
                     int blockcount = blocks.Count;
@@ -262,6 +241,8 @@ namespace RazMods
                             bData.targetid = character.EntityId;
                             bData.characterSpawned = true;
                             bData.characterid = character.EntityId;
+                            character.Save = true;
+                            MyVisualScriptLogicProvider.StoreEntityString(character.Name, "BOUNTYID", "" + bData.targetid);
                         } else
                         {
                             
@@ -270,6 +251,7 @@ namespace RazMods
                             cockpit.CustomName = charname;
                             bData.targettype = BountyTargetType.COCKPIT;
                             bData.targetid = cockpit.EntityId;
+                            MyVisualScriptLogicProvider.StoreEntityString(bountygrid.Name, "BOUNTYID", "" + bData.targetid);
                         }
                         //setup bouty data                       
                         bData.factionid = afaction.FactionId;
@@ -297,8 +279,8 @@ namespace RazMods
                             bData.targettype = BountyTargetType.BLOCK;
                         }                 
                         //setup bounty data                        
-                        bData.factionid = afaction.FactionId;                        
-                        
+                        bData.factionid = afaction.FactionId;
+                        MyVisualScriptLogicProvider.StoreEntityString(bountygrid.Name, "BOUNTYID", "" + bData.targetid);
                         //MyAPIGateway.Utilities.ShowMessage("Bounty", "Target is a Grid");
                         //MyVisualScriptLogicProvider.ShowNotificationToAll("Target is a Grid", 5000, "White");
 
@@ -308,6 +290,7 @@ namespace RazMods
                     IMyFaction placedfaction = enemies[_random.Next(enemies.Count - 1)];
                     bData.placedfaction = placedfaction.FactionId;
                     bData.reward = blockcount * REWARDMODIFIER;
+                    
                     bounties.Add(bData);
                     //MyAPIGateway.Utilities.ShowMessage("Bounty", "Generate Bounty");
                     AddBountytoBlocks(bData);
@@ -397,7 +380,112 @@ namespace RazMods
 
         #region Initialization
 
-        public void Init()
+        public override void Init(MyObjectBuilder_SessionComponent sessionComponent)
+        {
+            base.Init(sessionComponent);
+            if (!bInitialized)
+                Initialize();
+        }
+
+        public override void LoadData()
+        {
+            base.LoadData();
+            //check if bounty file exists, get a list of all contracts
+            MyLog.Default.WriteLineAndConsole("Check Bounty Data");
+            MyLog.Default.Debug("Check Bounty Data");
+            if (MyAPIGateway.Utilities.FileExistsInWorldStorage(bountyDataFile, typeof(List<bountyData>)))
+            {
+                var reader = MyAPIGateway.Utilities.ReadFileInWorldStorage(bountyDataFile, typeof(List<bountyData>));
+                if (reader != null)
+                {
+                    string data = reader.ReadToEnd();
+                    bounties = MyAPIGateway.Utilities.SerializeFromXML<List<bountyData>>(data);
+                    MyLog.Default.WriteLineAndConsole("Bounty Data Loaded");
+                    MyLog.Default.Debug("Bounty Data Loaded");
+                }
+            }
+            //check if NPC Data file exists, get a list of all contracts
+            MyLog.Default.WriteLineAndConsole("Check NPC Data");
+            MyLog.Default.Debug("Check NPC Data");
+            if (MyAPIGateway.Utilities.FileExistsInWorldStorage(NPCDataFile, typeof(List<characterData>)))
+            {
+                var reader = MyAPIGateway.Utilities.ReadFileInWorldStorage(NPCDataFile, typeof(List<characterData>));
+                if (reader != null)
+                {
+                    string data = reader.ReadToEnd();
+                    List<characterData> cdata = MyAPIGateway.Utilities.SerializeFromXML<List<characterData>>(data);
+                    if (cdata != null)
+                    {
+                        foreach (var character in cdata)
+                        {
+                            IMyCharacter ch = (IMyCharacter)MyVisualScriptLogicProvider.GetEntityById(character.characterid);
+                            if (ch != null)
+                            {
+                                Character mycharacter = new Character(ch);
+                                //check if there is a grid attached
+                                IMyCubeGrid cgrid = (IMyCubeGrid)MyVisualScriptLogicProvider.GetEntityById(character.gridid);
+                                if (cgrid != null)
+                                {
+                                    mycharacter.characterGrid = cgrid;
+                                }
+                                myCharacters.Add(mycharacter);
+                            }
+                        }
+                    }
+                    MyLog.Default.WriteLineAndConsole("NPC Data Loaded");
+                    MyLog.Default.Debug("NPC Data Loaded");
+                }
+            }
+            MyLog.Default.WriteLineAndConsole("Check Quest Data");
+            MyLog.Default.Debug("Check Quest Data");
+            if (MyAPIGateway.Utilities.FileExistsInWorldStorage(questDataFile, typeof(QuestManager)))
+            {
+                var reader = MyAPIGateway.Utilities.ReadFileInWorldStorage(questDataFile, typeof(QuestManager));
+                if (reader != null)
+                {
+                    string data = reader.ReadToEnd();
+                    QuestManager qm = MyAPIGateway.Utilities.SerializeFromXML<QuestManager>(data);
+                    if (qm != null)
+                        questManager = qm;
+
+                    MyLog.Default.WriteLineAndConsole("Quest Data Loaded");
+                }
+            }
+
+            bountySpawner = new BountySpawner();
+            MyLog.Default.WriteLineAndConsole("Bounty: Load Spawn Groups");
+            MyLog.Default.Debug("Bounty: Load Spawn Groups");
+            bountySpawner.SetupSpawns();
+
+        }
+
+        public override void SaveData()
+        {
+
+            base.SaveData();
+
+                string bountydata = MyAPIGateway.Utilities.SerializeToXML(bounties);
+                TextWriter tw = MyAPIGateway.Utilities.WriteFileInWorldStorage(bountyDataFile, typeof(string));
+                tw.Write(bountydata);
+                tw.Close();
+
+                List<characterData> characterdata = GetCharacterData(myCharacters);
+                string cdata = MyAPIGateway.Utilities.SerializeToXML(characterdata);
+                tw = MyAPIGateway.Utilities.WriteFileInWorldStorage(NPCDataFile, typeof(string));
+                tw.Write(cdata);
+                tw.Close();
+
+
+                string qdata = MyAPIGateway.Utilities.SerializeToXML(questManager);
+                tw = MyAPIGateway.Utilities.WriteFileInWorldStorage(questDataFile, typeof(string));
+                tw.Write(qdata);
+                tw.Close();
+
+                bSaveFlag = false;
+            
+        }
+
+        public void Initialize()
         {
             
             //make sure this runs serverside only for xbox compat.
@@ -406,72 +494,25 @@ namespace RazMods
             
             if (!bIsServer)
                 return;
-            thisMod = MyAPIGateway.Session.Mods.Find(x => x.Name.Contains("BountyHunter"));
-            modpath = thisMod.GetPath();
 
+            MyLog.Default.WriteLineAndConsole("Initialize Bounty Hunter");
+            MyLog.Default.Debug("Initialize Bounty Hunter");
             MyAPIGateway.Session.SessionSettings.EnableEconomy = true;
             MyAPIGateway.Session.SessionSettings.EnableBountyContracts = true;
 
             //get current factions
             factions = MyAPIGateway.Session.Factions.Factions;
 
-            //check if bounty file exists, get a list of all contracts
-            if(MyAPIGateway.Utilities.FileExistsInWorldStorage(bountyDataFile, typeof(string)))
-            {
-                var reader = MyAPIGateway.Utilities.ReadFileInWorldStorage(bountyDataFile, typeof(string));
-                if (reader != null)
-                {
-                    string data = reader.ReadToEnd();
-                    bounties = MyAPIGateway.Utilities.SerializeFromXML<List<bountyData>>(data);
-                }
-            }
-            //check if NPC Data file exists, get a list of all contracts
-            if (MyAPIGateway.Utilities.FileExistsInWorldStorage(NPCDataFile, typeof(string)))
-            {
-                var reader = MyAPIGateway.Utilities.ReadFileInWorldStorage(NPCDataFile, typeof(string));
-                if (reader != null)
-                {
-                    string data = reader.ReadToEnd();
-                    List<characterData> cdata = MyAPIGateway.Utilities.SerializeFromXML<List<characterData>>(data);
-                    if(cdata != null)
-                    {
-                        foreach (var character in cdata)
-                        {
-                            IMyCharacter ch = (IMyCharacter)MyVisualScriptLogicProvider.GetEntityById(character.characterid);
-                            if(ch != null)
-                            {
-                                Character mycharacter = new Character(ch);
-                                //check if there is a grid attached
-                                IMyCubeGrid cgrid = (IMyCubeGrid)MyVisualScriptLogicProvider.GetEntityById(character.gridid);
-                                if(cgrid != null)
-                                {
-                                    mycharacter.characterGrid = cgrid;
-                                }
-                                myCharacters.Add(mycharacter);
-                            }
-                        }
-                    }
-                }
-            }
-            if (MyAPIGateway.Utilities.FileExistsInWorldStorage(questDataFile, typeof(string)))
-            {
-                var reader = MyAPIGateway.Utilities.ReadFileInWorldStorage(questDataFile, typeof(string));
-                if (reader != null)
-                {
-                    string data = reader.ReadToEnd();
-                    QuestManager qm = MyAPIGateway.Utilities.SerializeFromXML<QuestManager>(data);
-                    if(qm != null)
-                        questManager = qm;
-                }
-            }
-            bountySpawner = new BountySpawner();
-            bountySpawner.SetupSpawns();
+
+
 
 
             //fetch current entity list
             HashSet<IMyEntity> entities = new HashSet<IMyEntity>();
             MyAPIGateway.Entities.GetEntities(entities);
 
+            MyLog.Default.WriteLineAndConsole("Check Entities");
+            MyLog.Default.Debug("Check Entities");
             //Parse existing characters in world
             IMyEntity[] ents = new IMyEntity[entities.Count];
             entities.CopyTo(ents, 0);
@@ -504,8 +545,11 @@ namespace RazMods
             }
 
             //destroyHandler = DestroyHandler;
-
+            MyLog.Default.WriteLineAndConsole("Bounty: SetCallbacks");
+            MyLog.Default.Debug("Bounty: SetCallbacks");
             SetCallbacks();
+            MyLog.Default.WriteLineAndConsole("BOUNTY SYSTEM INITIALIZED!");
+            MyLog.Default.Debug("BOUNTY SYSTEM INITIALIZED!");
             MyAPIGateway.Utilities.ShowMessage("Bounty", "BOUNTY SYSTEM INITIALIZED!");
         }
 
@@ -538,6 +582,9 @@ namespace RazMods
         #region CallBacks
         private void BountyDamageHandler(object target, MyDamageInformation info)
         {
+            if (target == null)
+                return;
+
             if (target as IMySlimBlock != null)
             {
                 IMySlimBlock entity = target as IMySlimBlock;
@@ -545,6 +592,8 @@ namespace RazMods
                 {
                     if (entity.Integrity <= 0)
                     {
+                        if (entity.FatBlock == null)
+                            return;
 
                         List<bountyData> bData = bounties.FindAll(x => x.targetid == entity.FatBlock.EntityId);
                         //MyAPIGateway.Utilities.ShowMessage("Bounty", entity.FatBlock.DisplayName + " Died!");
@@ -552,6 +601,8 @@ namespace RazMods
                         MyAPIGateway.Players.GetPlayers(players);
                         string insult = Insults.insults[_random.Next(0, Insults.insults.Length - 1)];
                         string deaths = DeathGenerator.deaths[_random.Next(0, DeathGenerator.deaths.Length-1)];
+
+                        
 
                         foreach (bountyData bd in bData)
                         {
@@ -561,6 +612,8 @@ namespace RazMods
                                 {
                                     bd.targetdead = true;
                                     MyVisualScriptLogicProvider.PlaySingleSoundAtPosition("BountyComplete", entity.FatBlock.GetPosition());
+
+                                    MyLog.Default.WriteLineAndConsole("BOUNTY: Bounty Complete");
                                     //Find all players for contract, reward bonus for the one who made the kill
                                     foreach (var acon in bd.activeContracts)
                                     {
@@ -574,7 +627,10 @@ namespace RazMods
 
 
                                             
-                                            MyAPIGateway.ContractSystem.TryFinishCustomContract(acon.contractid);
+                                            if(!MyAPIGateway.ContractSystem.TryFinishCustomContract(acon.contractid))
+                                            {
+                                                MyLog.Default.WriteLineAndConsole("BOUNTY: Try Finish - Invalid Contract ID: " + acon.contractid);
+                                            }
                                         }
                                         else
                                         {
@@ -584,7 +640,10 @@ namespace RazMods
                                                 if (MeasureDistance(p.Character.GetPosition(), entity.FatBlock.GetPosition()) <= 5000)
                                                 {
                                                     MyVisualScriptLogicProvider.ShowNotification("Collected Bounty " + bd.reward + " Credits", 10000, "Green", acon.playerid);
-                                                    MyAPIGateway.ContractSystem.TryFinishCustomContract(acon.contractid);
+                                                    if(!MyAPIGateway.ContractSystem.TryFinishCustomContract(acon.contractid))
+                                                    {
+                                                        MyLog.Default.WriteLineAndConsole("BOUNTY: Try Finish - Invalid Contract ID: " + acon.contractid);
+                                                    }
                                                 }
                                                 else
                                                 {
@@ -599,7 +658,10 @@ namespace RazMods
                                                         MyVisualScriptLogicProvider.ShowNotification("Bounty Failed " + entity.FatBlock.DisplayName + " was killed.", 5000, "Red", acon.playerid);
                                                     }
                                                     MyVisualScriptLogicProvider.PlaySingleSoundAtPosition("BountyFail", p.Character.GetPosition());
-                                                    MyAPIGateway.ContractSystem.TryFailCustomContract(acon.contractid);
+                                                    if(!MyAPIGateway.ContractSystem.TryFailCustomContract(acon.contractid))
+                                                    {
+                                                        MyLog.Default.WriteLineAndConsole("BOUNTY: Try Fail - Invalid Contract ID: " + acon.contractid);
+                                                    }
                                                 }
                                             }
 
@@ -617,6 +679,7 @@ namespace RazMods
                                     character.SetPosition(entity.FatBlock.GetPosition());
                                     bd.characterSpawned = true;
                                     bd.characterid = character.EntityId;
+                                    MyLog.Default.WriteLineAndConsole("BOUNTY: Spawned Character: ID - " + bd.characterid);
                                     //make sure character is saved in case restart happens
                                     bSaveFlag = true;
                                     
@@ -624,8 +687,8 @@ namespace RazMods
                                     {
                                         
                                         MyVisualScriptLogicProvider.SendChatMessageColored(insult, Color.Red, bd.name, acon.playerid);
-                                        MyVisualScriptLogicProvider.AddGPSToEntity(bd.name, bd.name, "Kill Target", Color.Orange);
-                                        MyVisualScriptLogicProvider.SetGPSHighlight(bd.name, bd.name, "Kill Target", Color.Orange);
+                                        MyVisualScriptLogicProvider.AddGPSToEntity(bd.name, bd.name, "Kill Target", Color.Orange, acon.playerid);
+                                        MyVisualScriptLogicProvider.SetGPSHighlight(bd.name, bd.name, "Kill Target", Color.Orange,true,10,120,Color.Red, acon.playerid);
                                     }
 
                                 }
@@ -636,19 +699,18 @@ namespace RazMods
                                     {
                                         if (ent as IMyCharacter != null)
                                         {
-                                            IMyCharacter character = target as IMyCharacter;
+                                            IMyCharacter character = ent as IMyCharacter;
 
                                             if (character != null)
                                             {
                                                 if (character.IsDead)
                                                 {
                                                     bd.targetdead = true;
-                                                    Character cdata = myCharacters.Find(c => c.Equals(character));
-                                                    if(cdata != null)
-                                                        myCharacters.Remove(cdata);
+
                                                     MyVisualScriptLogicProvider.PlaySingleSoundAtPosition("BountyComplete", character.GetPosition());
                                                     MyVisualScriptLogicProvider.RemoveGPSFromEntityForAll(bd.name, bd.name, "Target Dead");
                                                     MyVisualScriptLogicProvider.CreateExplosion(character.GetPosition(), 100);
+                                                    MyLog.Default.WriteLineAndConsole("BOUNTY: Character Killed: " + character.Name);
                                                     //Find all players for contract, reward bonus for the one who made the kill
                                                     foreach (var acon in bd.activeContracts)
                                                     {
@@ -663,7 +725,10 @@ namespace RazMods
 
 
 
-                                                            MyAPIGateway.ContractSystem.TryFinishCustomContract(acon.contractid);
+                                                            if(!MyAPIGateway.ContractSystem.TryFinishCustomContract(acon.contractid))
+                                                            {
+                                                                MyLog.Default.WriteLineAndConsole("BOUNTY: Failed to Finish Contract: "+ acon.contractid);
+                                                            }
                                                         }
                                                         else
                                                         {
@@ -673,7 +738,10 @@ namespace RazMods
                                                                 if (MeasureDistance(p.Character.GetPosition(), character.GetPosition()) <= 5000)
                                                                 {
                                                                     MyVisualScriptLogicProvider.ShowNotification("Collected Bounty " + bd.reward + " Credits", 10000, "Green", acon.playerid);
-                                                                    MyAPIGateway.ContractSystem.TryFinishCustomContract(acon.contractid);
+                                                                    if(!MyAPIGateway.ContractSystem.TryFinishCustomContract(acon.contractid))
+                                                                    {
+                                                                        MyLog.Default.WriteLineAndConsole("BOUNTY: Try Finish - Failed: " + acon.contractid);
+                                                                    }
                                                                 }
                                                                 else
                                                                 {
@@ -688,13 +756,19 @@ namespace RazMods
                                                                         MyVisualScriptLogicProvider.ShowNotification("Bounty Failed " + character.DisplayName + " was killed.", 5000, "Red", acon.playerid);
                                                                     }
                                                                     MyVisualScriptLogicProvider.PlaySingleSoundAtPosition("BountyFail", p.Character.GetPosition());
-                                                                    MyAPIGateway.ContractSystem.TryFailCustomContract(acon.contractid);
+                                                                    if(!MyAPIGateway.ContractSystem.TryFailCustomContract(acon.contractid))
+                                                                    {
+                                                                        MyLog.Default.WriteLineAndConsole("BOUNTY: Try Fail - Failed: " + acon.contractid);
+                                                                    }
                                                                 }
                                                             }
 
                                                         }
                                                         
                                                     }
+                                                    Character cdata = myCharacters.Find(c => c.character.EntityId==character.EntityId);
+                                                    if (cdata != null)
+                                                        myCharacters.Remove(cdata);
                                                 }
                                             }
                                         }
@@ -748,7 +822,10 @@ namespace RazMods
 
 
 
-                                        MyAPIGateway.ContractSystem.TryFinishCustomContract(acon.contractid);
+                                        if(!MyAPIGateway.ContractSystem.TryFinishCustomContract(acon.contractid))
+                                        {
+                                            MyLog.Default.WriteLineAndConsole("BOUNTY: Try Finish - Failed: " + acon.contractid);
+                                        }
                                     }
                                     else
                                     {
@@ -759,7 +836,10 @@ namespace RazMods
                                             if (MeasureDistance(p.Character.GetPosition(), character.GetPosition()) <= 5000)
                                             {
                                                 MyVisualScriptLogicProvider.ShowNotification("Collected Bounty " + bd.reward + " Credits", 10000, "Green", acon.playerid);
-                                                MyAPIGateway.ContractSystem.TryFinishCustomContract(acon.contractid);
+                                                if (!MyAPIGateway.ContractSystem.TryFinishCustomContract(acon.contractid))
+                                                {
+                                                    MyLog.Default.WriteLineAndConsole("BOUNTY: Try Finish - Failed: " + acon.contractid);
+                                                }
                                             }
                                             else
                                             {
@@ -774,7 +854,10 @@ namespace RazMods
                                                     MyVisualScriptLogicProvider.ShowNotification("Bounty Failed " + character.DisplayName + " was killed.", 5000, "Red", acon.playerid);
                                                 }
                                                 MyVisualScriptLogicProvider.PlaySingleSoundAtPosition("BountyFail", p.Character.GetPosition());
-                                                MyAPIGateway.ContractSystem.TryFailCustomContract(acon.contractid);
+                                                if(!MyAPIGateway.ContractSystem.TryFailCustomContract(acon.contractid))
+                                                {
+                                                    MyLog.Default.WriteLineAndConsole("BOUNTY: Try FAIL - Failed: " + acon.contractid);
+                                                }
                                             }
                                         }
 
@@ -860,18 +943,23 @@ namespace RazMods
 
             foreach (var bData in bounties)
             {
+                MyLog.Default.WriteLineAndConsole("Finish Contract: " + contractId);
                 activeContract acon = bData.activeContracts.Find(y => y.contractid == contractId && y.playerid == identityId);
                 if(acon!=null)
                 {
+                    MyLog.Default.WriteLineAndConsole("Found Contract: " + contractId);
                     PlayerQuest quest = questManager.quests.Find(x => x.playerID == identityId && x.questid == contractId);
                     if (quest != null)
                     {
+                        MyLog.Default.WriteLineAndConsole("Finish Quest: " + contractId);
                         int rewardAmount = bData.reward;
                         string bonus = "";
                         if(acon.bonus)
                         {
                             bonus = "Kill Bonus: "+(int)(bData.reward * 0.25);
                         }
+                        MyVisualScriptLogicProvider.SetQuestlog(true, quest.questName, quest.playerID);
+                        MyVisualScriptLogicProvider.AddQuestlogObjective(quest.objective, false, true, quest.playerID);
                         MyVisualScriptLogicProvider.ReplaceQuestlogDetail(quest.questDetail, "Target Destroyed - Reward: "+ rewardAmount+" Credits "+ bonus, true, identityId);
                         MyVisualScriptLogicProvider.SetQuestlogDetailCompleted(quest.questDetail,true,identityId);
                         quest.completed = true;
@@ -988,10 +1076,20 @@ namespace RazMods
             //MyAPIGateway.Utilities.ShowMessage("Bounty", "Activate Results? ID: " + a + " indentityId" + b);
 
             //check how many contracts character has
+
             int bcount = 0;
             foreach(var bounty in bounties)
             {
-                if(!bounty.targetdead)
+                IMyEntity ent = MyAPIGateway.Entities.GetEntityById(bounty.targetid);
+                if(ent==null)
+                {
+                    MyVisualScriptLogicProvider.ShowNotification("Error: Target is destoryed or lost", 5000, "Red", b);
+                    removeContract(bounty.targetid);
+                    return MyActivationCustomResults.Error_General;
+                }
+
+
+                if (!bounty.targetdead)
                     bcount += bounty.activeContracts.FindAll(bb => bb.playerid == b).Count;
             }
             if(bcount >= MAXBOUNTIESPERCHARACTER)
@@ -1001,6 +1099,7 @@ namespace RazMods
             }
             else
             {
+
                 return MyActivationCustomResults.Success;
             }
 
@@ -1018,32 +1117,35 @@ namespace RazMods
                 {
                     
                     IMyEntity ent = MyAPIGateway.Entities.GetEntityById(bData.targetid);
-                    //MyAPIGateway.Utilities.ShowMessage("Bounty", "Activation:  cid: " + contractId + " cond: " + identityId+ "ent: "+ con.entityid);                                     
-                    activeContract acon = new activeContract(identityId, contractId, con.conditionid, bData.targetid);                    
-                    Vector3D shippos = ent.GetPosition();
-                    Vector3D pos = new Vector3D(shippos.X + _random.Next(0, 500), shippos.Y + _random.Next(0, 600), shippos.Z + _random.Next(0, 500));
-                    IMyGps gps = MyAPIGateway.Session.GPS.Create("Last Known Coordinates: " + bData.name, "An anonymous tip came in saying they were spotted in the vicinity.", pos, true);
-                    gps.GPSColor = Color.Crimson;
-                    acon.gpsHash = gps.Hash;                    
-                    MyAPIGateway.Session.GPS.AddGps(identityId, gps);
-                    PlayerQuest quest = new PlayerQuest();
-                    quest.questName = "Bounty - " + bData.name;
-                    quest.questid = contractId;
-                    quest.playerID = identityId;                    
-                    MyVisualScriptLogicProvider.SetQuestlogTitle("Bounty - "+ bData.name, identityId);
-                    MyVisualScriptLogicProvider.SetQuestlog(true, quest.questName, identityId);
-                    quest.objective = "Seek out and Kill " + bData.name;
-                    quest.questObjective = MyVisualScriptLogicProvider.AddQuestlogObjective(quest.objective, false, false, identityId);
-                    quest.questdesc = bData.desc;
-                    quest.questDetail = MyVisualScriptLogicProvider.AddQuestlogDetail(quest.questdesc, false,true, identityId);
-                    //MyVisualScriptLogicProvider.SetQuestlog(true, quest.questName, identityId);
-                    
-                    MyVisualScriptLogicProvider.SetQuestlogVisible(true, identityId);
-                    questManager.quests.Add(quest);
-                    bSaveFlag = true;
-                    //MyAPIGateway.Utilities.ShowMissionScreen("Bounty","Assassinate Target","Seek out and Kill "+ent.DisplayName,)
-                    bData.activeContracts.Add(acon);
-                    return;
+                    if (ent != null)
+                    {
+                        //MyAPIGateway.Utilities.ShowMessage("Bounty", "Activation:  cid: " + contractId + " cond: " + identityId+ "ent: "+ con.entityid);                                     
+                        activeContract acon = new activeContract(identityId, contractId, con.conditionid, bData.targetid);
+                        Vector3D shippos = ent.GetPosition();
+                        Vector3D pos = new Vector3D(shippos.X + _random.Next(0, 500), shippos.Y + _random.Next(0, 600), shippos.Z + _random.Next(0, 500));
+                        IMyGps gps = MyAPIGateway.Session.GPS.Create("Last Known Coordinates: " + bData.name, "An anonymous tip came in saying they were spotted in the vicinity.", pos, true);
+                        gps.GPSColor = Color.Crimson;
+                        acon.gpsHash = gps.Hash;
+                        MyAPIGateway.Session.GPS.AddGps(identityId, gps);
+                        PlayerQuest quest = new PlayerQuest();
+                        quest.questName = "Bounty - " + bData.name;
+                        quest.questid = contractId;
+                        quest.playerID = identityId;
+                        MyVisualScriptLogicProvider.SetQuestlogTitle("Bounty - " + bData.name, identityId);
+                        MyVisualScriptLogicProvider.SetQuestlog(true, quest.questName, identityId);
+                        quest.objective = "Seek out and Kill " + bData.name;
+                        quest.questObjective = MyVisualScriptLogicProvider.AddQuestlogObjective(quest.objective, false, false, identityId);
+                        quest.questdesc = bData.desc;
+                        quest.questDetail = MyVisualScriptLogicProvider.AddQuestlogDetail(quest.questdesc, false, true, identityId);
+                        //MyVisualScriptLogicProvider.SetQuestlog(true, quest.questName, identityId);
+
+                        MyVisualScriptLogicProvider.SetQuestlogVisible(true, identityId);
+                        questManager.quests.Add(quest);
+                        bSaveFlag = true;
+                        //MyAPIGateway.Utilities.ShowMissionScreen("Bounty","Assassinate Target","Seek out and Kill "+ent.DisplayName,)
+                        bData.activeContracts.Add(acon);
+                        return;
+                    }
                 }
             }
         }
@@ -1063,7 +1165,8 @@ namespace RazMods
                     IMyFunctionalBlock fb = fat as IMyFunctionalBlock;
                     if (fb != null)
                     {
-                        IMyFaction faction = MyAPIGateway.Session.Factions.TryGetFactionByTag(fat.GetOwnerFactionTag());
+
+                        IMyFaction faction = MyAPIGateway.Session.Factions.TryGetPlayerFaction(fat.OwnerId);
                         if(faction != null)
                         {
                             ContractBlock cb = new ContractBlock(fb, faction, fb.CubeGrid);
@@ -1078,6 +1181,9 @@ namespace RazMods
 
         private void Grid_OnBlockRemoved(IMySlimBlock obj)
         {
+            if (obj == null)
+                return;
+
             var fat = obj.FatBlock;
             if (obj.BlockDefinition.Id.SubtypeName.Equals("ContractBlock"))
             {
@@ -1112,6 +1218,9 @@ namespace RazMods
         ///<returns><c>true</c> If entity was a grid</returns>
         public bool CheckNewGrid(IMyEntity entity)
         {
+            if (entity == null)
+                return false;
+
             if (entity as IMyCubeGrid != null)
             {
                 var grid = entity as IMyCubeGrid;
@@ -1138,9 +1247,9 @@ namespace RazMods
                     //add it if we don't have it
                     if (cblock == null)
                     {
-                        string faction = MyVisualScriptLogicProvider.GetPlayersFactionName(grid.BigOwners[0]);
-                        IMyFaction gridfaction = MyAPIGateway.Session.Factions.TryGetFactionByName(faction);
-                        if(gridfaction != null)
+                        
+                        IMyFaction gridfaction = MyAPIGateway.Session.Factions.TryGetPlayerFaction(grid.BigOwners[0]);
+                        if (gridfaction != null)
                         {
                             contractBlocks.Add(new ContractBlock(block, gridfaction, grid));
                         }
@@ -1150,14 +1259,14 @@ namespace RazMods
                         //do we have the grid and or faction data?                       
                         cblock.contractBlock = block;
                         cblock.parentGrid = grid;
-                        string faction = MyVisualScriptLogicProvider.GetPlayersFactionName(grid.BigOwners[0]);
-                        IMyFaction gridfaction = MyAPIGateway.Session.Factions.TryGetFactionByName(faction);
+                        IMyFaction gridfaction = MyAPIGateway.Session.Factions.TryGetPlayerFaction(grid.BigOwners[0]);
                         if (gridfaction != null)
                         {
                             cblock.faction = gridfaction;
                         }
                     }
                 }
+                
                 return true;
             }
             return false;
@@ -1172,6 +1281,8 @@ namespace RazMods
         ///<returns><c>void</c></returns>
         public void ProcessRemovedGrid(IMyEntity entity)
         {
+            if (entity == null)
+                return;
             if (entity as IMyCubeGrid != null)
             {
                 var grid = entity as IMyCubeGrid;
@@ -1197,6 +1308,7 @@ namespace RazMods
                         contractBlocks.Remove(cblock);
                     }
                 }
+
             }
         }
 
@@ -1212,6 +1324,8 @@ namespace RazMods
         ///<returns><c>true</c> if entitry was a character</returns>
         public bool CheckIsCharacter(IMyEntity entity)
         {
+            if (entity == null)
+                return false;
             if (entity as IMyCharacter != null)
             {
                 var character = entity as IMyCharacter;
@@ -1746,8 +1860,8 @@ namespace RazMods
     [System.Serializable]
     public class characterData
     {
-        public long characterid;
-        public long gridid;
+        public long characterid = 0;
+        public long gridid = 0;
     }
 
     [System.Serializable]
