@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<Definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    <ContractTypes>
+        <ContractType xsi:type="MyObjectBuilder_ContractTypeDefinition">
+            <Id>
+                <TypeId>ContractTypeDefinition</TypeId>
+                <SubtypeId>Hunt</SubtypeId>
+            </Id>
+            <Icon>Textures\FactionLogo\Others\OtherIcon_31.dds</Icon>
+            <Icon>Textures\GUI\Icons\Contracts\BountyContractHeader.dds</Icon>
+            <MinimumReputation>0</MinimumReputation>
+            <FailReputationPrice>0</FailReputationPrice>
+            <MinimumMoney>0</MinimumMoney>
+            <DurationMultiplier>1</DurationMultiplier>
+            <ChancesPerFactionType>
+                <ContractChance>
+                    <DefinitionId>
+                        <TypeId>MyObjectBuilder_FactionTypeDefinition</TypeId>
+                        <SubtypeId>Bounty</SubtypeId>
+                    </DefinitionId>
+                    <Value>100</Value>
+                </ContractChance>		
+            </ChancesPerFactionType>
+        </ContractType>	        
+    </ContractTypes>
+</Definitions>

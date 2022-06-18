@@ -10,9 +10,10 @@ using VRage.Game.Entity;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
+using VRage.Utils;
 using VRageMath;
 
-namespace RazMods
+namespace RazMods.Hunter.Spawns
 {
     public class BountySpawner
     {
@@ -33,11 +34,12 @@ namespace RazMods
 
         public void SetupSpawns()
         {
-
+            
             var mySpawnGroups = MyDefinitionManager.Static.GetSpawnGroupDefinitions();
 
             foreach(var spawnGroup in mySpawnGroups)
             {
+                MyLog.Default.WriteLineAndConsole("Spawn Group: " + spawnGroup.DisplayNameString + " id: " + spawnGroup.Id);
                 if(spawnGroup.Enabled==false) continue;
 
                 if(spawnGroup.IsPirate)

@@ -1,0 +1,278 @@
+﻿<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{46865E08-048A-4528-BDD6-3578D2BC36EF}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <NoStandardLibraries>false</NoStandardLibraries>
+    <AssemblyName>ClassLibrary</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+  <PropertyGroup>
+    <RootNamespace>BountyHunter</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="Sandbox.Common">
+      <HintPath>D:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\Sandbox.Common.dll</HintPath>
+    </Reference>
+    <Reference Include="Sandbox.Game">
+      <HintPath>D:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\Sandbox.Game.dll</HintPath>
+    </Reference>
+    <Reference Include="SpaceEngineers.Game">
+      <HintPath>D:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\SpaceEngineers.Game.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Activities" />
+    <Reference Include="System.Activities.Core.Presentation" />
+    <Reference Include="System.Activities.DurableInstancing" />
+    <Reference Include="System.Activities.Presentation" />
+    <Reference Include="System.AddIn" />
+    <Reference Include="System.AddIn.Contract" />
+    <Reference Include="System.ComponentModel.Composition" />
+    <Reference Include="System.ComponentModel.DataAnnotations" />
+    <Reference Include="System.configuration" />
+    <Reference Include="System.Configuration.Install" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="System.Data.Entity" />
+    <Reference Include="System.Data.Entity.Design" />
+    <Reference Include="System.Data.Linq" />
+    <Reference Include="System.Data.OracleClient" />
+    <Reference Include="System.Data.Services" />
+    <Reference Include="System.Data.Services.Client" />
+    <Reference Include="System.Data.Services.Design" />
+    <Reference Include="System.Data.SqlXml" />
+    <Reference Include="System.Deployment" />
+    <Reference Include="System.Design" />
+    <Reference Include="System.Device" />
+    <Reference Include="System.DirectoryServices" />
+    <Reference Include="System.DirectoryServices.AccountManagement" />
+    <Reference Include="System.DirectoryServices.Protocols" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Drawing.Design" />
+    <Reference Include="System.EnterpriseServices" />
+    <Reference Include="System.IdentityModel" />
+    <Reference Include="System.IdentityModel.Selectors" />
+    <Reference Include="System.IO.Log" />
+    <Reference Include="System.Management" />
+    <Reference Include="System.Management.Instrumentation" />
+    <Reference Include="System.Messaging" />
+    <Reference Include="System.Net" />
+    <Reference Include="System.Numerics" />
+    <Reference Include="System.Printing" />
+    <Reference Include="System.Runtime.Caching" />
+    <Reference Include="System.Runtime.DurableInstancing" />
+    <Reference Include="System.Runtime.Remoting" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Runtime.Serialization.Formatters.Soap" />
+    <Reference Include="System.Security" />
+    <Reference Include="System.ServiceModel" />
+    <Reference Include="System.ServiceModel.Activation" />
+    <Reference Include="System.ServiceModel.Activities" />
+    <Reference Include="System.ServiceModel.Channels" />
+    <Reference Include="System.ServiceModel.Discovery" />
+    <Reference Include="System.ServiceModel.Routing" />
+    <Reference Include="System.ServiceModel.Web" />
+    <Reference Include="System.ServiceProcess" />
+    <Reference Include="System.Speech" />
+    <Reference Include="System.Transactions" />
+    <Reference Include="System.Web" />
+    <Reference Include="System.Web.Abstractions" />
+    <Reference Include="System.Web.ApplicationServices" />
+    <Reference Include="System.Web.DataVisualization" />
+    <Reference Include="System.Web.DataVisualization.Design" />
+    <Reference Include="System.Web.DynamicData" />
+    <Reference Include="System.Web.DynamicData.Design" />
+    <Reference Include="System.Web.Entity" />
+    <Reference Include="System.Web.Entity.Design" />
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Web.Extensions.Design" />
+    <Reference Include="System.Web.Mobile" />
+    <Reference Include="System.Web.RegularExpressions" />
+    <Reference Include="System.Web.Routing" />
+    <Reference Include="System.Web.Services" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Windows.Forms.DataVisualization" />
+    <Reference Include="System.Windows.Forms.DataVisualization.Design" />
+    <Reference Include="System.Windows.Input.Manipulations" />
+    <Reference Include="System.Windows.Presentation" />
+    <Reference Include="System.Workflow.Activities" />
+    <Reference Include="System.Workflow.ComponentModel" />
+    <Reference Include="System.Workflow.Runtime" />
+    <Reference Include="System.WorkflowServices" />
+    <Reference Include="System.Xaml" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="VRage">
+      <HintPath>D:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.dll</HintPath>
+    </Reference>
+    <Reference Include="VRage.EOS.XmlSerializers">
+      <HintPath>D:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.EOS.XmlSerializers.dll</HintPath>
+    </Reference>
+    <Reference Include="VRage.Game">
+      <HintPath>D:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Game.dll</HintPath>
+    </Reference>
+    <Reference Include="VRage.Game.XmlSerializers">
+      <HintPath>D:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Game.XmlSerializers.dll</HintPath>
+    </Reference>
+    <Reference Include="VRage.Input">
+      <HintPath>D:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Input.dll</HintPath>
+    </Reference>
+    <Reference Include="VRage.Library">
+      <HintPath>D:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Library.dll</HintPath>
+    </Reference>
+    <Reference Include="VRage.Math">
+      <HintPath>D:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Math.dll</HintPath>
+    </Reference>
+    <Reference Include="VRage.Scripting">
+      <HintPath>D:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.Scripting.dll</HintPath>
+    </Reference>
+    <Reference Include="VRage.XmlSerializers">
+      <HintPath>D:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64\VRage.XmlSerializers.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include=".gitignore" />
+    <Content Include="Audio\ARC\SHIP\completed.wav" />
+    <Content Include="Audio\ARC\SHIP\fail.wav" />
+    <Content Include="metadata.mod" />
+    <Content Include="Textures\GUI\Icons\Contracts\BountyCustomContractHeader.dds" />
+    <Content Include="thumb.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include=".git\COMMIT_EDITMSG" />
+    <None Include=".git\config" />
+    <None Include=".git\description" />
+    <None Include=".git\FETCH_HEAD" />
+    <None Include=".git\HEAD" />
+    <None Include=".git\hooks\applypatch-msg.sample" />
+    <None Include=".git\hooks\commit-msg.sample" />
+    <None Include=".git\hooks\fsmonitor-watchman.sample" />
+    <None Include=".git\hooks\post-update.sample" />
+    <None Include=".git\hooks\pre-applypatch.sample" />
+    <None Include=".git\hooks\pre-commit.sample" />
+    <None Include=".git\hooks\pre-merge-commit.sample" />
+    <None Include=".git\hooks\pre-push.sample" />
+    <None Include=".git\hooks\pre-rebase.sample" />
+    <None Include=".git\hooks\pre-receive.sample" />
+    <None Include=".git\hooks\prepare-commit-msg.sample" />
+    <None Include=".git\hooks\push-to-checkout.sample" />
+    <None Include=".git\hooks\update.sample" />
+    <None Include=".git\index" />
+    <None Include=".git\info\exclude" />
+    <None Include=".git\logs\HEAD" />
+    <None Include=".git\logs\refs\heads\main" />
+    <None Include=".git\logs\refs\remotes\origin\HEAD" />
+    <None Include=".git\logs\refs\remotes\origin\main" />
+    <None Include=".git\objects\06\6753eaa3848efd4468ef1f03146807c34148e1" />
+    <None Include=".git\objects\06\7e3713b7dc300608fa06b1162bd832b906fea5" />
+    <None Include=".git\objects\0a\020fdf099056cfdfb5f0f4351688f40b8d186e" />
+    <None Include=".git\objects\13\54574fc05e842042cd702cb1e1dbee75407eea" />
+    <None Include=".git\objects\17\9e6ed7e25d601e59214eb65a1e26d45443a7af" />
+    <None Include=".git\objects\27\e4d274f62b721593707680c2c75076331eda3f" />
+    <None Include=".git\objects\39\9adf2c092f2cd9bd8d90b47f4b75573b63c57f" />
+    <None Include=".git\objects\3b\2c45c382f0869de193b781a2cdc078c0e3b350" />
+    <None Include=".git\objects\47\086e210d98202b7ae35525664b21c1c19ee877" />
+    <None Include=".git\objects\55\c9104447a54f153103fd440f2038d983250078" />
+    <None Include=".git\objects\58\5decea34b05bb697c3bb21fafb76c7b2e8bece" />
+    <None Include=".git\objects\59\56918f672eba5dceaa3589f674eca621aa236f" />
+    <None Include=".git\objects\5f\cba36a046ec5cf1673290c1f424dd52c6241b1" />
+    <None Include=".git\objects\5f\d80d394c64e2088a3bbaa75a719b91d4c23093" />
+    <None Include=".git\objects\63\08fb1120674e040e9a8528f8b3eb41abe2a9a2" />
+    <None Include=".git\objects\64\97064f49bbd9cc2555ec57a6b871a2c5e58a56" />
+    <None Include=".git\objects\6d\93d5d609f174e8e7feecccd206bbe55f7d494b" />
+    <None Include=".git\objects\6e\2217aecb5246bf5470b563df7c5e2107b92b10" />
+    <None Include=".git\objects\76\900e323672e031bc447679ffd254a6abb586d3" />
+    <None Include=".git\objects\77\c5a7d18a554ae8175101b2d7ef43fccb8f4c54" />
+    <None Include=".git\objects\7e\6aaee4ff9432ad40942bed94ec13ce606f989c" />
+    <None Include=".git\objects\88\f128ec2b19375159c7aaa901558ba0a30635fb" />
+    <None Include=".git\objects\8a\4541942634c224c61191570e68e3c9fae6cfe1" />
+    <None Include=".git\objects\8e\cf012d8663f9d71c9cea50d9c453ea3ef05a81" />
+    <None Include=".git\objects\9b\6f645d848cd60e8fb3f669d732f68e5d103cb3" />
+    <None Include=".git\objects\9f\ed2630342380933e6fb407e77890b1f4a492ee" />
+    <None Include=".git\objects\a0\ea3a7f23c0222101391bd29e52ebf2215b6316" />
+    <None Include=".git\objects\a2\e278a910e7ec78a0b27995e6226f7148c106dc" />
+    <None Include=".git\objects\a3\50140b8cf8acfef35ce6a21a326dba24811639" />
+    <None Include=".git\objects\a3\bf6ee1f4ebdc609aacf9001878a5e117a14909" />
+    <None Include=".git\objects\a4\41a28a38fce71d5c17ec82188a2a6fb14dd6ce" />
+    <None Include=".git\objects\a4\68e09e19844c55ef7d2c949d483bf1bba0517f" />
+    <None Include=".git\objects\a6\53551ed02e4a38519de86f3252fad155112b0a" />
+    <None Include=".git\objects\af\bd0ce7b688ca37b657537b53d6f046865a683f" />
+    <None Include=".git\objects\b3\e046992467a4f8d738decd488693a451e595de" />
+    <None Include=".git\objects\b6\52b0146ffa00781940b1ca667ecb1cf2177a66" />
+    <None Include=".git\objects\ba\6391ee2d90093dad5dfa87aa23e3b2092afc8b" />
+    <None Include=".git\objects\c4\694d86471d8f2dad21f54c672d97fcf0351d48" />
+    <None Include=".git\objects\c6\1fdf36b91a34386426d5f7888892f6e1b43f94" />
+    <None Include=".git\objects\c6\897c01237309cf566e871dcb796751301ed8f5" />
+    <None Include=".git\objects\c7\81159f51af4307ff9c690d160d83dfb4247e9b" />
+    <None Include=".git\objects\cb\631a1301ece8669486f1009dd19e9659bac51b" />
+    <None Include=".git\objects\d2\2a2be771318bfe07ca5279f45272f9b19f957e" />
+    <None Include=".git\objects\e2\a0ef4a29c825cba2b0b614d487ab558e95692b" />
+    <None Include=".git\objects\e9\1c0ea4af13c3a5e466dbaa5b43b8b4404ccd0e" />
+    <None Include=".git\objects\f1\64f8515423924e6380c5ec09f84b8e129f4d8c" />
+    <None Include=".git\objects\f7\35a648dac060db2c27b2ffeda0d6b86453ae8e" />
+    <None Include=".git\objects\fe\2bb7e352524f292bb69a0bd47309fe563d41f5" />
+    <None Include=".git\objects\pack\pack-b7cb0679dc07f6eaac5587535852fd24b5774b95.idx" />
+    <None Include=".git\objects\pack\pack-b7cb0679dc07f6eaac5587535852fd24b5774b95.pack" />
+    <None Include=".git\ORIG_HEAD" />
+    <None Include=".git\packed-refs" />
+    <None Include=".git\refs\heads\main" />
+    <None Include=".git\refs\remotes\origin\HEAD" />
+    <None Include=".git\refs\remotes\origin\main" />
+    <None Include=".vs\BountyHunter\v17\.suo" />
+    <None Include=".vs\slnx.sqlite" />
+    <None Include=".vs\VSWorkspaceState.json" />
+    <None Include="Data\Audio.sbc" />
+    <None Include="Data\Contracts\ContractTypes.sbc" />
+    <None Include="Data\Factions\FactionNames_Bounty.sbc" />
+    <None Include="Data\Factions\FactionTypes_Bounty.sbc" />
+    <None Include="Data\Stations\Stations_Bounty.sbc" />
+    <None Include="modinfo.sbmi" />
+    <None Include="README.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Data\Scripts\BountyHunter\Contracts\ContractManager.cs" />
+    <Compile Include="Data\Scripts\BountyHunter\Generators\BountyGenerator.cs" />
+    <Compile Include="Data\Scripts\BountyHunter\Main\BountyCutScene.cs" />
+    <Compile Include="Data\Scripts\BountyHunter\Main\BountyHunter.cs" />
+    <Compile Include="Data\Scripts\BountyHunter\Quests\QuestManager.cs" />
+    <Compile Include="Data\Scripts\BountyHunter\Spawns\BountySpawner.cs" />
+    <Compile Include="Data\Scripts\BountyHunter\Spawns\BountySpawnManager.cs" />
+    <Compile Include="Data\Scripts\BountyHunter\Generators\DeathGenerator.cs" />
+    <Compile Include="Data\Scripts\BountyHunter\Generators\Insults.cs" />
+    <Compile Include="Data\Scripts\BountyHunter\Generators\NameGenerator.cs" />
+    <Compile Include="Data\Scripts\BountyHunter\Stations\StationManager.cs" />
+    <Compile Include="Data\Scripts\Definitions\MissionStationDefinition.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include=".git\objects\info\" />
+    <Folder Include=".git\refs\tags\" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSHARP.Targets" />
+  <ProjectExtensions>
+    <VisualStudio AllowExistingFolder="true" />
+  </ProjectExtensions>
+</Project>

@@ -26,11 +26,11 @@ using Sandbox.Game.World;
 using static VRage.Game.MyObjectBuilder_Checkpoint;
 using Sandbox.Definitions;
 using VRage.Utils;
-
-namespace RazMods
+using RazMods.Hunter.Spawns;
+namespace RazMods.Hunter
 {
     [MySessionComponentDescriptor(MyUpdateOrder.BeforeSimulation)]
-    public class BountyHunter : MySessionComponentBase
+    public class BountyHunter_OLD : MySessionComponentBase
     {
         #region vars
         Action<object, MyDamageInformation> destroyHandler;
@@ -1617,13 +1617,13 @@ namespace RazMods
         public Action action;
         IMyFaction faction;
         List<IMyCubeGrid> grids;
-        BountyHunter bountyHunter;
+        BountyHunter_OLD bountyHunter;
         public SpawnCallback()
         {
 
         }
 
-        public SpawnCallback(BountyHunter b, IMyFaction f)
+        public SpawnCallback(BountyHunter_OLD b, IMyFaction f)
         {
             bountyHunter = b;           
             faction = f;

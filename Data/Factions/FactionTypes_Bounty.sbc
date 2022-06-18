@@ -1,0 +1,68 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <Definition xsi:type="MyObjectBuilder_FactionTypeDefinition">
+    <Id Type="MyObjectBuilder_FactionTypeDefinition" Subtype="Bounty" />
+    <OffersList>
+      <ItemId Type="MyObjectBuilder_PhysicalGunObject" Subtype="AutomaticRifleItem" />
+      <ItemId Type="MyObjectBuilder_PhysicalGunObject" Subtype="PreciseAutomaticRifleItem" />
+      <ItemId Type="MyObjectBuilder_PhysicalGunObject" Subtype="RapidFireAutomaticRifleItem" />
+      <ItemId Type="MyObjectBuilder_PhysicalGunObject" Subtype="UltimateAutomaticRifleItem" />
+      <ItemId Type="MyObjectBuilder_PhysicalGunObject" Subtype="SemiAutoPistolItem" />
+      <ItemId Type="MyObjectBuilder_PhysicalGunObject" Subtype="FullAutoPistolItem" />
+      <ItemId Type="MyObjectBuilder_PhysicalGunObject" Subtype="ElitePistolItem" />
+      <ItemId Type="MyObjectBuilder_PhysicalGunObject" Subtype="BasicHandHeldLauncherItem" />
+      <ItemId Type="MyObjectBuilder_PhysicalGunObject" Subtype="AdvancedHandHeldLauncherItem" />
+      <ItemId Type="MyObjectBuilder_Datapad" Subtype="Datapad" />
+
+      <ItemId Type="MyObjectBuilder_AmmoMagazine" Subtype="NATO_25x184mm" />
+      <ItemId Type="MyObjectBuilder_AmmoMagazine" Subtype="Missile200mm" />
+      <ItemId Type="MyObjectBuilder_AmmoMagazine" Subtype="AutocannonClip" />
+      <ItemId Type="MyObjectBuilder_AmmoMagazine" Subtype="MediumCalibreAmmo" />
+      <ItemId Type="MyObjectBuilder_AmmoMagazine" Subtype="LargeCalibreAmmo" />
+      <ItemId Type="MyObjectBuilder_AmmoMagazine" Subtype="LargeRailgunAmmo" />
+      <ItemId Type="MyObjectBuilder_AmmoMagazine" Subtype="SmallRailgunAmmo" />
+      <ItemId Type="MyObjectBuilder_AmmoMagazine" Subtype="InteriorTurret_Mag_100rd" />
+      <ItemId Type="MyObjectBuilder_AmmoMagazine" Subtype="SemiAutoPistolMagazine" />
+      <ItemId Type="MyObjectBuilder_AmmoMagazine" Subtype="FullAutoPistolMagazine" />
+      <ItemId Type="MyObjectBuilder_AmmoMagazine" Subtype="ElitePistolMagazine" />
+      <ItemId Type="MyObjectBuilder_AmmoMagazine" Subtype="AutomaticRifleGun_Mag_20rd" />
+      <ItemId Type="MyObjectBuilder_AmmoMagazine" Subtype="RapidFireAutomaticRifleGun_Mag_50rd" />
+      <ItemId Type="MyObjectBuilder_AmmoMagazine" Subtype="PreciseAutomaticRifleGun_Mag_5rd" />
+      <ItemId Type="MyObjectBuilder_AmmoMagazine" Subtype="UltimateAutomaticRifleGun_Mag_30rd" />
+
+      <ItemId Type="MyObjectBuilder_OxygenContainerObject" Subtype="OxygenBottle" />
+      <ItemId Type="MyObjectBuilder_GasContainerObject" Subtype="HydrogenBottle" />
+
+      <ItemId Type="MyObjectBuilder_ConsumableItem" Subtype="Medkit" />
+      <ItemId Type="MyObjectBuilder_ConsumableItem" Subtype="Powerkit" />
+
+      <ItemId Type="MyObjectBuilder_ConsumableItem" Subtype="ClangCola" />
+      <ItemId Type="MyObjectBuilder_ConsumableItem" Subtype="CosmicCoffee" />
+    </OffersList>
+
+    <OrdersList>
+      <ItemId Type="MyObjectBuilder_Ingot" Subtype="Cobalt" />
+      <ItemId Type="MyObjectBuilder_Ingot" Subtype="Magnesium" />
+      <ItemId Type="MyObjectBuilder_Ingot" Subtype="Silver" />
+      <ItemId Type="MyObjectBuilder_Ingot" Subtype="Gold" />
+      <ItemId Type="MyObjectBuilder_Ingot" Subtype="Platinum" />
+      <ItemId Type="MyObjectBuilder_Ingot" Subtype="Uranium" />
+
+      <ItemId Type="MyObjectBuilder_Component" Subtype="Superconductor" />
+      <ItemId Type="MyObjectBuilder_Component" Subtype="Reactor" />
+      <ItemId Type="MyObjectBuilder_Component" Subtype="Thrust" />
+      <ItemId Type="MyObjectBuilder_Component" Subtype="GravityGenerator" />
+      <ItemId Type="MyObjectBuilder_Component" Subtype="RadioCommunication" />
+      <ItemId Type="MyObjectBuilder_Component" Subtype="Detector" />
+      <ItemId Type="MyObjectBuilder_Component" Subtype="SolarCell" />
+      <ItemId Type="MyObjectBuilder_Component" Subtype="PowerCell" />
+
+    </OrdersList>
+
+    <CanSellOxygen>true</CanSellOxygen>
+    <CanSellHydrogen>true</CanSellHydrogen>
+
+    <MaxContractCount>15</MaxContractCount>
+  </Definition>
+
+</Definitions>
