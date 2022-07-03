@@ -52,7 +52,7 @@ namespace RazMods.Hunter.CutScenes
         }
 
 
-        public void AddCutScene(IMyEntity entity,string cutsceneName, string waypointsName,List<CutsceneSequenceNodeWaypoint> waypointdef, List<Vector3D> waypoints)
+        public void AddCutScene(VRage.Game.ModAPI.Ingame.IMyEntity entity,string cutsceneName, string waypointsName,List<CutsceneSequenceNodeWaypoint> waypointdef, List<Vector3D> waypoints)
         {
 
             List<Vector3D> vwaypoints = new List<Vector3D>();

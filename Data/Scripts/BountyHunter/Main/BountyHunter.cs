@@ -14,7 +14,7 @@ namespace RazMods.Hunter
 {
     using RazMods.Hunter.Spawns;
     using RazMods.Hunter.Stations;
-
+    using VRage.Utils;
 
     [MySessionComponentDescriptor(MyUpdateOrder.BeforeSimulation)]
     public class BountyHunter : MySessionComponentBase
@@ -22,11 +22,11 @@ namespace RazMods.Hunter
         #region vars
         BountySpawnManager bountySpawnManager;
         StationManager stationManager;
-
-
-
+        GridGenerator gridGenerator;
+ 
         bool bIsServer = false;
         bool bInitialized = false;
+
         #endregion
 
 
@@ -39,21 +39,28 @@ namespace RazMods.Hunter
             Initialize();
         }
 
+
         public void Initialize()
         {
+
             bountySpawnManager = new BountySpawnManager();
             stationManager = new StationManager();
+
             bIsServer = MyAPIGateway.Multiplayer.IsServer;
             bInitialized = true;
+            
 
             if (!bIsServer)
                 return;
+            MyLog.Default.WriteLineAndConsole("Bounty Hunter: Initialized");
+            MyAPIGateway.Utilities.ShowMessage("Bounty Hunter:", "Initialized");
+            SetCallbacks();
         }
 
         public override void BeforeStart()
         {
             base.BeforeStart();
-            MyAPIGateway.Utilities.ShowMessage("Bounty:", "Initialized");
+
             HashSet<IMyEntity> entities = new HashSet<IMyEntity>();
             MyAPIGateway.Entities.GetEntities(entities);           
             stationManager.Setup();
@@ -65,20 +72,36 @@ namespace RazMods.Hunter
             MyAPIGateway.Entities.OnEntityAdd += CheckGrid;
             MyAPIGateway.Entities.OnEntityAdd += stationManager.Entities_OnEntityAdd;
             MyAPIGateway.Entities.OnEntityRemove += Entities_OnEntityRemove;
+            //MyAPIGateway.Utilities.MessageRecieved += Utilities_MessageRecieved;
+            MyAPIGateway.Utilities.MessageEnteredSender += Utilities_MessageEnteredSender;
 
-            
+
         }
 
+        private void Utilities_MessageEnteredSender(ulong sender, string messageText, ref bool sendToOthers)
+        {
+            if (messageText.Contains("/GenerateGrid") && !GeneratorManager.Instance.isGenerating)
+            {
+                MyAPIGateway.Utilities.ShowMessage("Bounty Hunter:", "Generating Grid");
+                GeneratorManager.Instance.GenerateGrid();
+                sendToOthers = false;
+                
+            }
 
+        }
+
+        private void Utilities_MessageRecieved(ulong playerid, string message)
+        {
+            MyAPIGateway.Utilities.ShowMessage("Message:", message);
+
+        }
 
         private void Entities_OnEntityRemove(IMyEntity entity)
         {
             if (entity == null)
                 return;
 
-            MyAPIGateway.Entities.OnEntityAdd -= stationManager.Entities_OnEntityAdd;
-            MyAPIGateway.Entities.OnEntityAdd -= CheckGrid;
-            MyAPIGateway.Entities.OnEntityRemove -= Entities_OnEntityRemove;
+
         }
 
         #endregion
