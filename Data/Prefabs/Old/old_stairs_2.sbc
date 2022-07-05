@@ -8,10 +8,10 @@
       <CubeGrids>
         <CubeGrid>
           <SubtypeName />
-          <EntityId>84239406367947989</EntityId>
+          <EntityId>80065961527388578</EntityId>
           <PersistentFlags>CastShadows InScene</PersistentFlags>
           <PositionAndOrientation>
-            <Position x="20.607999269506955" y="-42.716002746941413" z="-272.31832737535836" />
+            <Position x="-9.84865112501291" y="-41.358944477907571" z="-270.39827043750194" />
             <Forward x="-0.209605634" y="-0.363735318" z="-0.9076134" />
             <Up x="-0.4698735" y="-0.776561141" z="0.4197281" />
             <Orientation>
@@ -40,7 +40,7 @@
             </MyObjectBuilder_CubeBlock>
             <MyObjectBuilder_CubeBlock xsi:type="MyObjectBuilder_CubeBlock">
               <SubtypeName>PassageScifiCorner</SubtypeName>
-              <EntityId>79542525714818429</EntityId>
+              <EntityId>96331566041006621</EntityId>
               <Min x="1" y="-3" z="1" />
               <BlockOrientation Forward="Backward" Up="Up" />
               <ColorMaskHSV x="0" y="-0.8" z="-0.3" />
@@ -77,7 +77,7 @@
             </MyObjectBuilder_CubeBlock>
             <MyObjectBuilder_CubeBlock xsi:type="MyObjectBuilder_Ladder2">
               <SubtypeName>LadderShaft</SubtypeName>
-              <EntityId>134055583115530504</EntityId>
+              <EntityId>96519695577925168</EntityId>
               <Min x="0" y="-3" z="0" />
               <BlockOrientation Forward="Right" Up="Up" />
               <ColorMaskHSV x="0" y="-0.8" z="-0.3" />
@@ -86,7 +86,7 @@
             </MyObjectBuilder_CubeBlock>
             <MyObjectBuilder_CubeBlock xsi:type="MyObjectBuilder_Ladder2">
               <SubtypeName>LadderShaft</SubtypeName>
-              <EntityId>133090357666462010</EntityId>
+              <EntityId>85669051240574315</EntityId>
               <Min x="0" y="-1" z="0" />
               <BlockOrientation Forward="Right" Up="Up" />
               <ColorMaskHSV x="0" y="-0.8" z="-0.3" />
@@ -102,7 +102,7 @@
             </MyObjectBuilder_CubeBlock>
             <MyObjectBuilder_CubeBlock xsi:type="MyObjectBuilder_Ladder2">
               <SubtypeName>LadderShaft</SubtypeName>
-              <EntityId>135042966721248573</EntityId>
+              <EntityId>92129206825026875</EntityId>
               <Min x="0" y="-2" z="0" />
               <BlockOrientation Forward="Right" Up="Up" />
               <ColorMaskHSV x="0" y="-0.8" z="-0.3" />
@@ -216,7 +216,7 @@
             </MyObjectBuilder_CubeBlock>
             <MyObjectBuilder_CubeBlock xsi:type="MyObjectBuilder_Ladder2">
               <SubtypeName>LadderShaft</SubtypeName>
-              <EntityId>104225759905137333</EntityId>
+              <EntityId>100298060509737528</EntityId>
               <BlockOrientation Forward="Right" Up="Up" />
               <ColorMaskHSV x="0" y="-0.8" z="-0.3" />
               <SkinSubtypeId>Rusty_Armor</SkinSubtypeId>
@@ -224,7 +224,7 @@
             </MyObjectBuilder_CubeBlock>
             <MyObjectBuilder_CubeBlock xsi:type="MyObjectBuilder_CubeBlock">
               <SubtypeName>PassageScifiCorner</SubtypeName>
-              <EntityId>79225079790296144</EntityId>
+              <EntityId>113740590270789939</EntityId>
               <Min x="-1" y="-3" z="1" />
               <BlockOrientation Forward="Left" Up="Up" />
               <ColorMaskHSV x="0" y="-0.8" z="-0.3" />
@@ -233,7 +233,7 @@
             </MyObjectBuilder_CubeBlock>
             <MyObjectBuilder_CubeBlock xsi:type="MyObjectBuilder_CubeBlock">
               <SubtypeName>PassageSciFiTjunction</SubtypeName>
-              <EntityId>81501367044619918</EntityId>
+              <EntityId>119772588462194191</EntityId>
               <Min x="0" y="-3" z="1" />
               <BlockOrientation Forward="Right" Up="Up" />
               <ColorMaskHSV x="0" y="-0.8" z="-0.3" />
@@ -242,7 +242,7 @@
             </MyObjectBuilder_CubeBlock>
             <MyObjectBuilder_CubeBlock xsi:type="MyObjectBuilder_InteriorLight">
               <SubtypeName>PassageSciFiLight</SubtypeName>
-              <EntityId>103650698154446093</EntityId>
+              <EntityId>120138131672011217</EntityId>
               <Min x="1" y="0" z="0" />
               <BlockOrientation Forward="Up" Up="Right" />
               <ColorMaskHSV x="0" y="-0.8" z="-0.3" />
@@ -268,7 +268,7 @@
             </MyObjectBuilder_CubeBlock>
             <MyObjectBuilder_CubeBlock xsi:type="MyObjectBuilder_InteriorLight">
               <SubtypeName>PassageSciFiLight</SubtypeName>
-              <EntityId>112617115902442610</EntityId>
+              <EntityId>143370342845363199</EntityId>
               <Min x="1" y="-1" z="0" />
               <BlockOrientation Forward="Up" Up="Right" />
               <ColorMaskHSV x="0" y="-0.8" z="-0.3" />
@@ -294,7 +294,7 @@
             </MyObjectBuilder_CubeBlock>
             <MyObjectBuilder_CubeBlock xsi:type="MyObjectBuilder_CubeBlock">
               <SubtypeName>PassageScifiCorner</SubtypeName>
-              <EntityId>102886393039245511</EntityId>
+              <EntityId>72436617689984009</EntityId>
               <Min x="1" y="-3" z="-1" />
               <BlockOrientation Forward="Right" Up="Up" />
               <ColorMaskHSV x="0" y="-0.8" z="-0.3" />
@@ -303,33 +303,31 @@
             </MyObjectBuilder_CubeBlock>
             <MyObjectBuilder_CubeBlock xsi:type="MyObjectBuilder_CubeBlock">
               <SubtypeName>PassageScifiCorner</SubtypeName>
-              <EntityId>125200055685366180</EntityId>
+              <EntityId>74911235274147057</EntityId>
               <Min x="-1" y="-3" z="-1" />
               <ColorMaskHSV x="0" y="-0.8" z="-0.3" />
               <SkinSubtypeId>Rusty_Armor</SkinSubtypeId>
               <BuiltBy>144115188075855895</BuiltBy>
             </MyObjectBuilder_CubeBlock>
             <MyObjectBuilder_CubeBlock xsi:type="MyObjectBuilder_CubeBlock">
-              <SubtypeName>PassageSciFiTjunction</SubtypeName>
-              <EntityId>143740374848563417</EntityId>
+              <SubtypeName>PassageSciFiIntersection</SubtypeName>
+              <EntityId>73708001729090861</EntityId>
               <Min x="-1" y="-3" z="0" />
-              <BlockOrientation Forward="Backward" Up="Up" />
               <ColorMaskHSV x="0" y="-0.8" z="-0.3" />
               <SkinSubtypeId>Rusty_Armor</SkinSubtypeId>
               <BuiltBy>144115188075855895</BuiltBy>
             </MyObjectBuilder_CubeBlock>
             <MyObjectBuilder_CubeBlock xsi:type="MyObjectBuilder_CubeBlock">
-              <SubtypeName>PassageSciFiTjunction</SubtypeName>
-              <EntityId>85260337784884441</EntityId>
+              <SubtypeName>PassageSciFiIntersection</SubtypeName>
+              <EntityId>83421561097863567</EntityId>
               <Min x="0" y="-3" z="-1" />
-              <BlockOrientation Forward="Left" Up="Up" />
               <ColorMaskHSV x="0" y="-0.8" z="-0.3" />
               <SkinSubtypeId>Rusty_Armor</SkinSubtypeId>
               <BuiltBy>144115188075855895</BuiltBy>
             </MyObjectBuilder_CubeBlock>
             <MyObjectBuilder_CubeBlock xsi:type="MyObjectBuilder_Ladder2">
               <SubtypeName>LadderShaft</SubtypeName>
-              <EntityId>74305215792875967</EntityId>
+              <EntityId>74716902866999528</EntityId>
               <Min x="0" y="1" z="0" />
               <BlockOrientation Forward="Right" Up="Up" />
               <ColorMaskHSV x="0" y="-0.8" z="-0.3" />
@@ -359,7 +357,7 @@
             </MyObjectBuilder_CubeBlock>
             <MyObjectBuilder_CubeBlock xsi:type="MyObjectBuilder_CubeBlock">
               <SubtypeName>PassageSciFiIntersection</SubtypeName>
-              <EntityId>106647411658616608</EntityId>
+              <EntityId>108519171198101007</EntityId>
               <Min x="1" y="-3" z="0" />
               <ColorMaskHSV x="0" y="-0.8" z="-0.3" />
               <SkinSubtypeId>Rusty_Armor</SkinSubtypeId>
@@ -395,7 +393,7 @@
             </MyObjectBuilder_CubeBlock>
             <MyObjectBuilder_CubeBlock xsi:type="MyObjectBuilder_BatteryBlock">
               <SubtypeName>LargeBlockBatteryBlockWarfare2</SubtypeName>
-              <EntityId>134921495912370111</EntityId>
+              <EntityId>76140291081776296</EntityId>
               <Min x="1" y="-2" z="0" />
               <BlockOrientation Forward="Backward" Up="Up" />
               <ColorMaskHSV x="0" y="-0.8" z="-0.3" />
@@ -424,7 +422,7 @@
           <DisplayName>OLD_STAIRS_2</DisplayName>
           <DestructibleBlocks>true</DestructibleBlocks>
           <IsRespawnGrid>false</IsRespawnGrid>
-          <LocalCoordSys>6</LocalCoordSys>
+          <LocalCoordSys>7</LocalCoordSys>
           <TargetingTargets />
         </CubeGrid>
       </CubeGrids>

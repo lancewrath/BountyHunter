@@ -119,15 +119,16 @@ namespace RazMods.Hunter
         public Vector3D entranceTranslation = new Vector3D(0, 5, 0);
         public Vector3D stairsTranslation = new Vector3D(0, 7.5, 0);
         public Vector3D lightTranslation = new Vector3D(0, 2.5, 0);
-        public Vector3D largeCargoTranslation = new Vector3D(0, 5, 0);
-        public Vector3D smallCargoTranslation = new Vector3D(0, 2.5, 0);
-        public Vector3D reactorTranslation = new Vector3D(0, 5, -1);
-        public Vector3D batteryTranslation = new Vector3D(0, 5, 0);
+        public Vector3D largeCargoTranslation = new Vector3D(0, -2.5, 0);
+        public Vector3D smallCargoTranslation = new Vector3D(0, -2.5, 0);
+        public Vector3D reactorTranslation = new Vector3D(0, -2.5, 0);
+        public Vector3D batteryTranslation = new Vector3D(0, -2.5, 0);
         public Vector3D lcdTranslation = new Vector3D(0, 0, 0);
-        public Vector3D functionalsTranslation = new Vector3D(0, 0, 0);
-        public Vector3D hangarTranslation = new Vector3D(0, 0, 0);
+        public Vector3D functionalsTranslation = new Vector3D(0, -2.5, 0);
+        public Vector3D hangarTranslation = new Vector3D(0, 2.5, 0);
         public Vector3D chairTranslation = new Vector3D(0, -2.5, 0);
         public Vector3 cellTranslation = new Vector3(0, 5, 0);
+
         public Vector3 currentTranslationV3 = Vector3.Zero;
 
         public bool lightRelative = true;
@@ -958,7 +959,7 @@ namespace RazMods.Hunter
         }
 
 
-        List<MyObjectBuilder_CubeBlock> getPrefabBlocks(string prefabName, int i, int j, int l, Vector3D pos, bool horizontal = false)
+        List<MyObjectBuilder_CubeBlock> getPrefabBlocks(string prefabName, int i, int j, int l, Vector3D pos, bool horizontal = false, bool flipdir = false)
         {
             List<MyObjectBuilder_CubeBlock> blocks = new List<MyObjectBuilder_CubeBlock> ();
             if (startBlock == null)
@@ -987,13 +988,34 @@ namespace RazMods.Hunter
                             SerializableBlockOrientation borient = block.BlockOrientation;
                             Vector3 dir = Base6Directions.GetVector(borient.Forward);
                             Vector3 newdir = new Vector3(dir.Z, dir.Y, dir.X);
+
                             borient.Forward = Base6Directions.GetDirection(newdir);
+                            if(flipdir)
+                                borient.Forward = Base6Directions.GetFlippedDirection(borient.Forward);
                             block.BlockOrientation = borient;
-                            bpos = new Vector3I(block.Min.Z + gpos.X, block.Min.Y + gpos.Y, block.Min.X + gpos.Z);
+                            if (flipdir)
+                            {
+                                Vector3 pdir = Base6Directions.GetVector(borient.Forward);
+                                bpos = new Vector3I(block.Min.Z + gpos.X, block.Min.Y + gpos.Y, -block.Min.X + gpos.Z);
+                            } else
+                            {
+                                bpos = new Vector3I(block.Min.Z + gpos.X, block.Min.Y + gpos.Y, block.Min.X + gpos.Z);
+                            }
+                                
                         }
                         else
                         {
-                            bpos = new Vector3I(block.Min.X + gpos.X, block.Min.Y + gpos.Y, block.Min.Z + gpos.Z);
+                            if (flipdir)
+                            {
+                                SerializableBlockOrientation borient = block.BlockOrientation;
+                                borient.Forward = Base6Directions.GetFlippedDirection(borient.Forward);
+                                block.BlockOrientation = borient;
+                                bpos = new Vector3I(block.Min.X + gpos.X, block.Min.Y + gpos.Y, -block.Min.Z + gpos.Z);
+                            } else
+                            {
+                                bpos = new Vector3I(block.Min.X + gpos.X, block.Min.Y + gpos.Y, block.Min.Z + gpos.Z);
+                            }
+                            
                         }
                         
                         //MyLog.Default.WriteLineAndConsole("Block: " + bpos.X + " - " + bpos.Y + " - " + bpos.Z);
@@ -1129,7 +1151,7 @@ namespace RazMods.Hunter
             Vector3 center = getNodeCenter(i, j, l);
             currentTranslationV3 = lcdTranslation;
             Vector3 newrotation = Vector3.Zero;
-
+            bool isflipped = false;
             if (lcdRelative)
             {
                 if (horizontal)
@@ -1145,15 +1167,27 @@ namespace RazMods.Hunter
                 }
             }
 
+            if (direction < 0 && !horizontal)
+            {
+                isflipped = true;
+
+            }
+                
 
             Vector3 newpos = pos + center + currentTranslationV3;
-            int max = generatorDef.lcd1.Count;
-            int itemno = MathHelper.Clamp(random.Next(max), 1, max);
+            int max = generatorDef.lcd1.Count-1;
+            if (max < 0)
+            {
+                max = 0;
+            }
+            int itemno = MathHelper.Clamp(random.Next(max), 0, max);
             try
             {
                 string lcd1 = max > 0 ? generatorDef.lcd1[itemno - 1] : "";
                 //MyLog.Default.WriteLineAndConsole("Trying to spawn " + lcd1);
-               //MyAPIGateway.PrefabManager.SpawnPrefab(ng.cubeGrids, lcd1, newpos, GetForward(newrotation), GetUp(newrotation), Vector3.Zero, Vector3.Zero, "None", SpawningOptions.UseOnlyWorldMatrix | SpawningOptions.SpawnRandomCargo | SpawningOptions.SetNeutralOwner, true, ng.GridSpawned);
+                //MyAPIGateway.PrefabManager.SpawnPrefab(ng.cubeGrids, lcd1, newpos, GetForward(newrotation), GetUp(newrotation), Vector3.Zero, Vector3.Zero, "None", SpawningOptions.UseOnlyWorldMatrix | SpawningOptions.SpawnRandomCargo | SpawningOptions.SetNeutralOwner, true, ng.GridSpawned);
+                var prefBlocks = getPrefabBlocks(lcd1, i, j, l, newpos, !horizontal, isflipped);
+                generatedGrid.CubeBlocks.AddRange(prefBlocks);
             }
             catch (Exception ex)
             {
@@ -1169,7 +1203,7 @@ namespace RazMods.Hunter
             NodeGrid ng = new NodeGrid(i, j, l, this);
 
             Vector3 center = getNodeCenter(i, j, l);
-            currentTranslationV3 = reactorTranslation;
+            currentTranslationV3 = batteryTranslation;
             Vector3 newrotation = Vector3.Zero;
 
             if (batteryRelative)
@@ -1189,13 +1223,19 @@ namespace RazMods.Hunter
 
 
             Vector3 newpos = pos + center + currentTranslationV3;
-            int max = generatorDef.battery.Count;
-            int itemno = MathHelper.Clamp(random.Next(max), 1, max);
+            int max = generatorDef.battery.Count-1;
+            if (max < 0)
+            {
+                max = 0;
+            }
+            int itemno = MathHelper.Clamp(random.Next(max), 0, max);
             try
             {
-                string battery = max > 0 ? generatorDef.battery[itemno - 1] : "";
+                string battery = max >= 0 ? generatorDef.battery[itemno] : "";
                 //MyLog.Default.WriteLineAndConsole("Trying to spawn " + battery);
                 //MyAPIGateway.PrefabManager.SpawnPrefab(ng.cubeGrids, battery, newpos, GetForward(newrotation), GetUp(newrotation), Vector3.Zero, Vector3.Zero, "None", SpawningOptions.UseOnlyWorldMatrix | SpawningOptions.SpawnRandomCargo | SpawningOptions.SetNeutralOwner, true, ng.GridSpawned);
+                var prefBlocks = getPrefabBlocks(battery, i, j, l, newpos);
+                generatedGrid.CubeBlocks.AddRange(prefBlocks);
             }
             catch (Exception ex)
             {
@@ -1313,13 +1353,19 @@ namespace RazMods.Hunter
 
 
             Vector3 newpos = pos + center + currentTranslationV3;
-            int max = generatorDef.scargo.Count;
-            int itemno = MathHelper.Clamp(random.Next(max), 1, max);
+            int max = generatorDef.scargo.Count-1;
+            if (max < 0)
+            {
+                max = 0;
+            }
+            int itemno = MathHelper.Clamp(random.Next(max), 0, max); 
             try
             {
-                string scargo = max >= 0 ? generatorDef.scargo[itemno - 1] : "";
+                string scargo = max >= 0 ? generatorDef.scargo[itemno] : "";
                 //MyLog.Default.WriteLineAndConsole("Trying to spawn " + scargo);
-               // MyAPIGateway.PrefabManager.SpawnPrefab(ng.cubeGrids, scargo, newpos, GetForward(newrotation), GetUp(newrotation), Vector3.Zero, Vector3.Zero, "None", SpawningOptions.UseOnlyWorldMatrix | SpawningOptions.SpawnRandomCargo | SpawningOptions.SetNeutralOwner, true, ng.GridSpawned);
+                // MyAPIGateway.PrefabManager.SpawnPrefab(ng.cubeGrids, scargo, newpos, GetForward(newrotation), GetUp(newrotation), Vector3.Zero, Vector3.Zero, "None", SpawningOptions.UseOnlyWorldMatrix | SpawningOptions.SpawnRandomCargo | SpawningOptions.SetNeutralOwner, true, ng.GridSpawned);
+                var prefBlocks = getPrefabBlocks(scargo, i, j, l, newpos);
+                generatedGrid.CubeBlocks.AddRange(prefBlocks);
             }
             catch (Exception ex)
             {
@@ -1358,13 +1404,19 @@ namespace RazMods.Hunter
             }
 
             Vector3 newpos = pos + center + currentTranslationV3;
-            int max = generatorDef.lcargo.Count;
-            int itemno = MathHelper.Clamp(random.Next(max), 1, max);
+            int max = generatorDef.lcargo.Count-1;
+            if (max < 0)
+            {
+                max = 0;
+            }
+            int itemno = MathHelper.Clamp(random.Next(max), 0, max);
             try
             {
-                string lcargo = max > 0 ? generatorDef.lcargo[itemno - 1] : "";
+                string lcargo = max >= 0 ? generatorDef.lcargo[itemno] : "";
                 //MyLog.Default.WriteLineAndConsole("Trying to spawn " + lcargo);
-              //  MyAPIGateway.PrefabManager.SpawnPrefab(ng.cubeGrids, lcargo, newpos, GetForward(newrotation), GetUp(newrotation), Vector3.Zero, Vector3.Zero, "None", SpawningOptions.UseOnlyWorldMatrix | SpawningOptions.SpawnRandomCargo | SpawningOptions.SetNeutralOwner, true, ng.GridSpawned);
+                //  MyAPIGateway.PrefabManager.SpawnPrefab(ng.cubeGrids, lcargo, newpos, GetForward(newrotation), GetUp(newrotation), Vector3.Zero, Vector3.Zero, "None", SpawningOptions.UseOnlyWorldMatrix | SpawningOptions.SpawnRandomCargo | SpawningOptions.SetNeutralOwner, true, ng.GridSpawned);
+                var prefBlocks = getPrefabBlocks(lcargo, i, j, l, newpos);
+                generatedGrid.CubeBlocks.AddRange(prefBlocks);
             }
             catch (Exception ex)
             {
@@ -1384,11 +1436,15 @@ namespace RazMods.Hunter
             Vector3 center = getNodeCenter(i, j, l);
             currentTranslationV3 = chairTranslation;
             Vector3 newpos = pos + center + currentTranslationV3;
-            int max = generatorDef.chair.Count;
-            int itemno = MathHelper.Clamp(random.Next(max), 1, max);
+            int max = generatorDef.chair.Count-1;
+            if (max < 0)
+            {
+                max = 0;
+            }
+            int itemno = MathHelper.Clamp(random.Next(max), 0, max);
             try
             {
-                string chair = max > 0 ? generatorDef.chair[itemno - 1] : "";
+                string chair = max >= 0 ? generatorDef.chair[itemno] : "";
                 //MyLog.Default.WriteLineAndConsole("Trying to spawn " + chair);
                 //    MyAPIGateway.PrefabManager.SpawnPrefab(ng.cubeGrids, chair, newpos, Vector3.Forward, Vector3.Up, Vector3.Zero, Vector3.Zero, "None", SpawningOptions.UseOnlyWorldMatrix | SpawningOptions.SpawnRandomCargo | SpawningOptions.SetNeutralOwner, true, ng.GridSpawned);
                 var prefBlocks = getPrefabBlocks(chair, i, j, l, newpos);
@@ -1444,13 +1500,20 @@ namespace RazMods.Hunter
             currentTranslationV3 = functionalsTranslation;
             Vector3 newpos = pos + center + currentTranslationV3;
             Vector3 newrotation = Vector3.Normalize(new Vector3(0, random.Next(4) * 90, 0));
-            int max = generatorDef.functionals.Count;
-            int itemno = MathHelper.Clamp(random.Next(max), 1, max);
+            int max = generatorDef.functionals.Count-1;
+            if (max < 0)
+            {
+                max = 0;
+            }
+            int itemno = MathHelper.Clamp(random.Next(max), 0, max);
             try
             {
-                string functionals = max > 0 ? generatorDef.functionals[itemno - 1] : "";
+                string functionals = max >= 0 ? generatorDef.functionals[itemno] : "";
+
+                var prefBlocks = getPrefabBlocks(functionals, i, j, l, newpos);
+                generatedGrid.CubeBlocks.AddRange(prefBlocks);
                 //MyLog.Default.WriteLineAndConsole("Trying to spawn " + functionals);
-             //   MyAPIGateway.PrefabManager.SpawnPrefab(ng.cubeGrids, functionals, newpos, GetForward(newrotation), GetUp(newrotation), Vector3.Zero, Vector3.Zero, "None", SpawningOptions.UseOnlyWorldMatrix | SpawningOptions.SpawnRandomCargo | SpawningOptions.SetNeutralOwner, true, ng.GridSpawned);
+                //   MyAPIGateway.PrefabManager.SpawnPrefab(ng.cubeGrids, functionals, newpos, GetForward(newrotation), GetUp(newrotation), Vector3.Zero, Vector3.Zero, "None", SpawningOptions.UseOnlyWorldMatrix | SpawningOptions.SpawnRandomCargo | SpawningOptions.SetNeutralOwner, true, ng.GridSpawned);
             }
             catch (Exception ex)
             {
@@ -1526,14 +1589,19 @@ namespace RazMods.Hunter
                         newrotation = new Vector3D(0, 180, 0);
                 }
             }
-            int max = generatorDef.light.Count;
-            int itemno = MathHelper.Clamp(random.Next(max), 1, max);
+            int max = generatorDef.light.Count-1;
+            if (max < 0)
+            {
+                max = 0;
+            }
+            int itemno = MathHelper.Clamp(random.Next(max), 0, max);
             try
             {
-                string light = max > 0 ? generatorDef.light[itemno - 1] : "";
+                string light = max >= 0 ? generatorDef.light[itemno] : "";
                 //MyLog.Default.WriteLineAndConsole("Trying to spawn " + light);
-               // MyAPIGateway.PrefabManager.SpawnPrefab(ng.cubeGrids, light, newpos, GetForward(newrotation), GetUp(newrotation), Vector3.Zero, Vector3.Zero, "None", SpawningOptions.UseOnlyWorldMatrix | SpawningOptions.SpawnRandomCargo | SpawningOptions.SetNeutralOwner, true, ng.GridSpawned);
-                
+                // MyAPIGateway.PrefabManager.SpawnPrefab(ng.cubeGrids, light, newpos, GetForward(newrotation), GetUp(newrotation), Vector3.Zero, Vector3.Zero, "None", SpawningOptions.UseOnlyWorldMatrix | SpawningOptions.SpawnRandomCargo | SpawningOptions.SetNeutralOwner, true, ng.GridSpawned);
+                var prefBlocks = getPrefabBlocks(light, i, j, l, newpos, !horizontal);
+                generatedGrid.CubeBlocks.AddRange(prefBlocks);
             }
             catch (Exception ex)
             {
