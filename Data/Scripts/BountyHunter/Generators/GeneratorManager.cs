@@ -60,6 +60,7 @@ namespace RazMods.Hunter
                     {
                         this.def = gdef;
                         MyLog.Default.WriteLineAndConsole("Grid Generator: Loaded - " + gdef.Name);
+                        CompilePrefabs(gdef);
                         generatorDefs.Add(gdef);
                     }
                 }
@@ -68,6 +69,68 @@ namespace RazMods.Hunter
                 def = new GeneratorDef();
 
         }
+
+
+        void CompilePrefabs(GeneratorDef generatorDef)
+        {
+
+
+            foreach (var item in generatorDef.battery)
+            {
+
+                MyDefinitionManager.Static.GetPrefabDefinition(item);
+            }
+            foreach (var item in generatorDef.ceiling)
+            {
+                MyDefinitionManager.Static.GetPrefabDefinition(item);
+            }
+            foreach (var item in generatorDef.chair)
+            {
+                MyDefinitionManager.Static.GetPrefabDefinition(item);
+            }
+            foreach (var item in generatorDef.deco)
+            {
+                MyDefinitionManager.Static.GetPrefabDefinition(item);
+            }
+            foreach (var item in generatorDef.door)
+            {
+                MyDefinitionManager.Static.GetPrefabDefinition(item);
+            }
+            foreach (var item in generatorDef.floor)
+            {
+                MyDefinitionManager.Static.GetPrefabDefinition(item);
+            }
+            foreach (var item in generatorDef.gate)
+            {
+                MyDefinitionManager.Static.GetPrefabDefinition(item);
+            }
+            foreach (var item in generatorDef.functionals)
+            {
+                MyDefinitionManager.Static.GetPrefabDefinition(item);
+            }
+            foreach (var item in generatorDef.hangar)
+            {
+                MyDefinitionManager.Static.GetPrefabDefinition(item);
+            }
+            foreach (var item in generatorDef.lcargo)
+            {
+                MyDefinitionManager.Static.GetPrefabDefinition(item);
+            }
+            foreach (var item in generatorDef.scargo)
+            {
+                MyDefinitionManager.Static.GetPrefabDefinition(item);
+            }
+            foreach (var item in generatorDef.solidwall)
+            {
+                MyDefinitionManager.Static.GetPrefabDefinition(item);
+            }
+            foreach (var item in generatorDef.stairs)
+            {
+                MyDefinitionManager.Static.GetPrefabDefinition(item);
+            }
+
+        }
+
 
         public override void SaveData()
         {

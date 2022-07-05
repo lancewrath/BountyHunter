@@ -108,7 +108,7 @@ namespace RazMods.Hunter
         public bool cleanDeadends = true;
         public bool addFloor = true;
         public bool addCeiling = true, addWall = true, addEntrances = true, addLargeCargo = true, addSmallCargo = true, addReactor = true, addBattery = true, addfunctionals = true, addHangar = true, addGate = true, addLight = true, addLCD = true, addLCD2 = true, addStairs = true, addChair = true, addCell = true;
-        public List<IMyCubeGrid>[][][] nodes;
+        //public List<IMyCubeGrid>[][][] nodes;
         //public Vector3D nodeSize = new Vector3D(7.5, 7.5, 7.5);
         //public float floorHeight = 1.25f;
         //public GameObject[,,] nodes;
@@ -146,7 +146,7 @@ namespace RazMods.Hunter
         //public string ceiling, solidwall, door, lcargo, scargo, reactor, battery, functionals, hangar, gate, light, lcd1, lcd2, stairs, chair;
         public PrefabObjectListContainer prefabObjectContainer;
 
-        public List<NodeGrid> nodeGrids = new List<NodeGrid>();
+        //public List<NodeGrid> nodeGrids = new List<NodeGrid>();
 
         bool isMerged = false;
 
@@ -160,7 +160,7 @@ namespace RazMods.Hunter
             this.levels = l;
             random = new System.Random(s);
             data = getEmptyMap(w, h, l);
-            nodes = getEmptyGridMap(w, h, l);
+            //nodes = getEmptyGridMap(w, h, l);
 
             scx = new int[sic];
             scy = new int[sic];
@@ -184,6 +184,7 @@ namespace RazMods.Hunter
             random = new System.Random(s);
         }
 
+        [Obsolete]
         public List<IMyCubeGrid>[][][] getEmptyGridMap(int width, int height, int levels)
         {
 
@@ -234,11 +235,12 @@ namespace RazMods.Hunter
 
             foreach (var item in generatorDef.battery)
             {
+                
                 modelLibrary.Add(item);
             }
             foreach (var item in generatorDef.ceiling)
             {
-                modelLibrary.Add(item);
+               modelLibrary.Add(item);
             }
             foreach (var item in generatorDef.chair)
             {
@@ -250,7 +252,7 @@ namespace RazMods.Hunter
             }
             foreach (var item in generatorDef.door)
             {
-                modelLibrary.Add(item);
+               modelLibrary.Add(item);
             }
             foreach (var item in generatorDef.floor)
             {
@@ -309,8 +311,9 @@ namespace RazMods.Hunter
 
         void InitializeGenerator()
         {
+            if(modelLibrary.Count == 0)
+                LoadModelList();
             
-            LoadModelList();
             CompileCustomPrefabs();
         }
 
@@ -1060,14 +1063,14 @@ namespace RazMods.Hunter
 
                 }
             }
-            nodes[i][j][l] = grids;
+            //nodes[i][j][l] = grids;
             return grids;
         }
 
         void newOpening(int i, int j, int l, Vector3D pos)
         {
             //if (!addWall) { return; }
-            NodeGrid ng = new NodeGrid(i, j, l, this);
+            //NodeGrid ng = new NodeGrid(i, j, l, this);
 
             Vector3 center = getNodeCenter(i, j, l);
             Vector3 newrotation = Vector3.Zero;
@@ -1105,12 +1108,12 @@ namespace RazMods.Hunter
         {
             if (!addLCD2) { return; }
 
-            NodeGrid ng = new NodeGrid(i, j, l, this);
+            //NodeGrid ng = new NodeGrid(i, j, l, this);
 
             Vector3 center = getNodeCenter(i, j, l);
             currentTranslationV3 = lcdTranslation;
             Vector3 newrotation = Vector3.Zero;
-
+            bool isflipped = false;
             if (lcdRelative)
             {
                 if (horizontal)
@@ -1124,13 +1127,26 @@ namespace RazMods.Hunter
                     if (direction < 0)
                         newrotation = Vector3.Normalize(new Vector3(0, 180, 0));
                 }
+
             }
-            int max = generatorDef.lcd2.Count;
-            int itemno = MathHelper.Clamp(random.Next(max), 1, max);
+            if (direction < 0 && !horizontal)
+            {
+                isflipped = true;
+
+            }
+            Vector3 newpos = pos + center + currentTranslationV3;
+            int max = generatorDef.lcd2.Count-1;
+            if (max < 0)
+            {
+                max = 0;
+            }
+            int itemno = MathHelper.Clamp(random.Next(max), 0, max);
             try
             {
                 string lcd2 = max > 0 ? generatorDef.lcd2[itemno - 1] : "";
-                Vector3 newpos = pos + center + currentTranslationV3;
+                var prefBlocks = getPrefabBlocks(lcd2, i, j, l, newpos, !horizontal, isflipped);
+                generatedGrid.CubeBlocks.AddRange(prefBlocks);
+                //Vector3 newpos = pos + center + currentTranslationV3;
                 //MyLog.Default.WriteLineAndConsole("Trying to spawn " + lcd2);
 
                 //MyAPIGateway.PrefabManager.SpawnPrefab(ng.cubeGrids, lcd2, newpos, GetForward(newrotation), GetUp(newrotation), Vector3.Zero, Vector3.Zero, "None", SpawningOptions.UseOnlyWorldMatrix | SpawningOptions.SpawnRandomCargo | SpawningOptions.SetNeutralOwner, true, ng.GridSpawned);
@@ -1139,14 +1155,14 @@ namespace RazMods.Hunter
             {
                 MyLog.Default.WriteLineAndConsole("Error spawning: " + ex.Message);
             }
-            nodeGrids.Add(ng);
+            //nodeGrids.Add(ng);
         }
 
         void newLCD1(int i, int j, int l, Vector3D pos, int direction, bool horizontal)
         {
             if (!addLCD) { return; }
 
-            NodeGrid ng = new NodeGrid(i, j, l, this);
+            //NodeGrid ng = new NodeGrid(i, j, l, this);
 
             Vector3 center = getNodeCenter(i, j, l);
             currentTranslationV3 = lcdTranslation;
@@ -1193,14 +1209,14 @@ namespace RazMods.Hunter
             {
                 MyLog.Default.WriteLineAndConsole("Error spawning: " + ex.Message);
             }
-            nodeGrids.Add(ng);
+            //nodeGrids.Add(ng);
         }
 
 
         void newBattery(int i, int j, int l, Vector3D pos, int direction, bool horizontal)
         {
             if (!addBattery) { return; }
-            NodeGrid ng = new NodeGrid(i, j, l, this);
+            //NodeGrid ng = new NodeGrid(i, j, l, this);
 
             Vector3 center = getNodeCenter(i, j, l);
             currentTranslationV3 = batteryTranslation;
@@ -1241,7 +1257,7 @@ namespace RazMods.Hunter
             {
                 MyLog.Default.WriteLineAndConsole("Error spawning: " + ex.Message);
             }
-            nodeGrids.Add(ng);
+            //nodeGrids.Add(ng);
         }
 
 
@@ -1249,7 +1265,7 @@ namespace RazMods.Hunter
         void newWall(int i, int j, int l, Vector3D pos)
         {
             if (!addWall) { return; }
-            NodeGrid ng = new NodeGrid(i, j, l, this);
+            //NodeGrid ng = new NodeGrid(i, j, l, this);
 
             Vector3 center = getNodeCenter(i, j, l);           
             Vector3 newrotation = Vector3.Zero;
@@ -1286,12 +1302,12 @@ namespace RazMods.Hunter
         void newReactor(int i, int j, int l, Vector3D pos, int direction, bool horizontal)
         {
             if (!addReactor) { return; }
-            NodeGrid ng = new NodeGrid(i, j, l, this);
+            //NodeGrid ng = new NodeGrid(i, j, l, this);
 
             Vector3 center = getNodeCenter(i, j, l);
             currentTranslationV3 = reactorTranslation;
             Vector3 newrotation = Vector3.Zero;
-
+            bool isflipped = false;
 
             if (reactorRelative)
             {
@@ -1308,27 +1324,37 @@ namespace RazMods.Hunter
                 }
             }
 
+            if (direction < 0 && !horizontal)
+            {
+                isflipped = true;
 
+            }
             Vector3 newpos = pos + center + currentTranslationV3;
-            int max = generatorDef.reactor.Count;
-            int itemno = MathHelper.Clamp(random.Next(max), 1, max);
+            int max = generatorDef.reactor.Count-1;
+            if (max < 0)
+            {
+                max = 0;
+            }
+            int itemno = MathHelper.Clamp(random.Next(max), 0, max);
             try
             {
-                string reactor = max > 0 ? generatorDef.reactor[itemno - 1] : "";
-               // MyLog.Default.WriteLineAndConsole("Trying to spawn " + reactor);
-               // MyAPIGateway.PrefabManager.SpawnPrefab(ng.cubeGrids, reactor, newpos, GetForward(newrotation), GetUp(newrotation), Vector3.Zero, Vector3.Zero, "None", SpawningOptions.UseOnlyWorldMatrix | SpawningOptions.SpawnRandomCargo | SpawningOptions.SetNeutralOwner, true, ng.GridSpawned);
+                string reactor = max >= 0 ? generatorDef.reactor[itemno] : "";
+                // MyLog.Default.WriteLineAndConsole("Trying to spawn " + reactor);
+                // MyAPIGateway.PrefabManager.SpawnPrefab(ng.cubeGrids, reactor, newpos, GetForward(newrotation), GetUp(newrotation), Vector3.Zero, Vector3.Zero, "None", SpawningOptions.UseOnlyWorldMatrix | SpawningOptions.SpawnRandomCargo | SpawningOptions.SetNeutralOwner, true, ng.GridSpawned);
+                var prefBlocks = getPrefabBlocks(reactor, i, j, l, newpos, !horizontal, isflipped);
+                generatedGrid.CubeBlocks.AddRange(prefBlocks);
             }
             catch (Exception ex)
             {
                 MyLog.Default.WriteLineAndConsole("Error spawning: " + ex.Message);
             }
-            nodeGrids.Add(ng);
+            //nodeGrids.Add(ng);
         }
 
         void newSmallCargo(int i, int j, int l, Vector3D pos, int direction, bool horizontal)
         {
             if (!addSmallCargo) { return; }
-            NodeGrid ng = new NodeGrid(i, j, l, this);
+            //NodeGrid ng = new NodeGrid(i, j, l, this);
 
             Vector3 center = getNodeCenter(i, j, l);
             currentTranslationV3 = smallCargoTranslation;
@@ -1371,14 +1397,14 @@ namespace RazMods.Hunter
             {
                 MyLog.Default.WriteLineAndConsole("Error spawning: " + ex.Message);
             }
-            nodeGrids.Add(ng);
+            //nodeGrids.Add(ng);
         }
 
         void newLargeCargo(int i, int j, int l, Vector3D pos, int direction, bool horizontal)
         {
             if (!addLargeCargo) { return; }
 
-            NodeGrid ng = new NodeGrid(i, j, l, this);
+            //NodeGrid ng = new NodeGrid(i, j, l, this);
 
             Vector3 center = getNodeCenter(i, j, l);
             currentTranslationV3 = largeCargoTranslation;
@@ -1422,7 +1448,7 @@ namespace RazMods.Hunter
             {
                 MyLog.Default.WriteLineAndConsole("Error spawning: " + ex.Message);
             }
-            nodeGrids.Add(ng);
+            //nodeGrids.Add(ng);
 
 
         }
@@ -1431,7 +1457,7 @@ namespace RazMods.Hunter
         {
             if (!addChair) { return; }
 
-            NodeGrid ng = new NodeGrid(i, j, l, this);
+            //NodeGrid ng = new NodeGrid(i, j, l, this);
 
             Vector3 center = getNodeCenter(i, j, l);
             currentTranslationV3 = chairTranslation;
@@ -1454,7 +1480,7 @@ namespace RazMods.Hunter
             {
                 MyLog.Default.WriteLineAndConsole("Error spawning: " + ex.Message);
             }
-            nodeGrids.Add(ng);
+            //nodeGrids.Add(ng);
         }
 
         void newStairs(int i, int j, int l, Vector3D pos)
@@ -1464,7 +1490,7 @@ namespace RazMods.Hunter
                 return;
             }
 
-            NodeGrid ng = new NodeGrid(i, j, l, this);
+            //NodeGrid ng = new NodeGrid(i, j, l, this);
             Vector3 center = getNodeCenter(i, j, l);
             currentTranslationV3 = stairsTranslation;
             Vector3D newpos = center + currentTranslationV3;
@@ -1494,7 +1520,7 @@ namespace RazMods.Hunter
         {
             if (!addfunctionals) { return; }
 
-            NodeGrid ng = new NodeGrid(i, j, l, this);
+            //NodeGrid ng = new NodeGrid(i, j, l, this);
 
             Vector3 center = getNodeCenter(i, j, l);
             currentTranslationV3 = functionalsTranslation;
@@ -1520,7 +1546,7 @@ namespace RazMods.Hunter
                 MyLog.Default.WriteLineAndConsole("Error spawning: " + ex.Message);
             }
             
-            nodeGrids.Add(ng);
+            //nodeGrids.Add(ng);
 
         }
 
@@ -1528,7 +1554,7 @@ namespace RazMods.Hunter
         {
             if (!addEntrances) { return; }
 
-            NodeGrid ng = new NodeGrid(i, j, l, this);
+            //NodeGrid ng = new NodeGrid(i, j, l, this);
 
             Vector3 center = getNodeCenter(i, j, l);
 
@@ -1566,7 +1592,7 @@ namespace RazMods.Hunter
         {
             if (!addLight) { return; }
 
-            NodeGrid ng = new NodeGrid(i, j, l, this);
+            //NodeGrid ng = new NodeGrid(i, j, l, this);
 
             Vector3 center = getNodeCenter(i, j, l);
             Vector3 newpos = pos;
@@ -1607,15 +1633,15 @@ namespace RazMods.Hunter
             {
                 MyLog.Default.WriteLineAndConsole("Error spawning: " + ex.Message);
             }
-            nodeGrids.Add(ng);
+            //nodeGrids.Add(ng);
         }
 
         void newCell(int i, int j, int l, Vector3D pos, int direction, bool horizontal, int n)
         {
-            NodeGrid ng;
+            //NodeGrid ng;
             if (n % 2 == 0 && addCell)
             {
-                ng = new NodeGrid(i, j, l, this);
+                //ng = new NodeGrid(i, j, l, this);
             }
             else
             {
@@ -1664,20 +1690,20 @@ namespace RazMods.Hunter
             {
                 MyLog.Default.WriteLineAndConsole("Error spawning: " + ex.Message);
             }
-            nodeGrids.Add(ng);
+            //nodeGrids.Add(ng);
         }
 
         void newFloor(int i, int j, int l, Vector3D pos, bool flr)
         {
             if (!addFloor && !addCeiling) { return; }
 
-            NodeGrid ng = null;
+            //NodeGrid ng = null;
             Vector3D center = getNodeCenter(i, j, l);
             if (flr)
             {
 
                 Vector3D newpos = center + floorTranslation;
-                ng = new NodeGrid(i, j, l, this);
+                //ng = new NodeGrid(i, j, l, this);
                 int max = generatorDef.floor.Count-1;
                 if (max < 0)
                 {
@@ -1704,7 +1730,7 @@ namespace RazMods.Hunter
 
                 Vector3D newpos = center + ceilingTranslation;
 
-                ng = new NodeGrid(i, j, l, this);
+                //ng = new NodeGrid(i, j, l, this);
                 int max = generatorDef.ceiling.Count-1;
                 if (max < 0)
                 {
@@ -1725,10 +1751,10 @@ namespace RazMods.Hunter
                     MyLog.Default.WriteLineAndConsole("Error spawning: " + ex.Message);
                 }
             }
-            if (ng != null)
-            {
+            //if (ng != null)
+            //{
                 //nodeGrids.Add(ng);
-            }
+            //}
 
         }
 
@@ -4748,6 +4774,7 @@ namespace RazMods.Hunter
         #endregion
     }
 
+    /*
     public class NodeGrid
     {
         public List<IMyCubeGrid> cubeGrids = new List<IMyCubeGrid>();
@@ -4791,4 +4818,5 @@ namespace RazMods.Hunter
             }
         }
     }
+    */
 }
