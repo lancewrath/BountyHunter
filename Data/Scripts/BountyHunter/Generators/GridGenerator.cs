@@ -148,7 +148,8 @@ namespace RazMods.Hunter
 
         //public List<NodeGrid> nodeGrids = new List<NodeGrid>();
 
-        bool isMerged = false;
+        bool isFinished = false;
+        bool isGenerating = false;
 
         #endregion vars
 
@@ -286,10 +287,25 @@ namespace RazMods.Hunter
             {
                 modelLibrary.Add(item);
             }
-
+            foreach (var item in generatorDef.light)
+            {
+                modelLibrary.Add(item);
+            }
+            foreach (var item in generatorDef.reactor)
+            {
+                modelLibrary.Add(item);
+            }
+            foreach (var item in generatorDef.lcd1)
+            {
+                modelLibrary.Add(item);
+            }
+            foreach (var item in generatorDef.lcd2)
+            {
+                modelLibrary.Add(item);
+            }
         }
 
-        void CompileCustomPrefabs()
+        public void CompileCustomPrefabs()
         {
             prefabObjectContainer = new PrefabObjectListContainer();
             ListReader<MyComponentDefinitionBase> entComps = MyDefinitionManager.Static.GetEntityComponentDefinitions();
@@ -314,7 +330,7 @@ namespace RazMods.Hunter
             if(modelLibrary.Count == 0)
                 LoadModelList();
             
-            CompileCustomPrefabs();
+            //CompileCustomPrefabs();
         }
 
         public void GeneratedStation()
@@ -350,6 +366,7 @@ namespace RazMods.Hunter
                     int v2MaxLengthOffset = 0;
 
                     GenerateStation(v2genNorth, v2genSouth, v2genEast, v2genWest, width / 2, height / 2, v2Branch, v2Turn, v2End, v2Room, v2Stairs, v2Model, v2Priority, false, true, true, false, v2Planar, v2Csavoid, PScale.NoScalingDefault(), v2CorridorMaxLength, StationTileType.Ending, v2CountOffset, v2MaxLengthOffset, v2EndRooms, v2TallRooms, v2TallRoomMaxHeight, v2TallRoomMinHeight, roommin, roommax, v2LargeCorridors, v2SpawnCorridorsFromRooms);
+                    isGenerating = true;
                 }
 
                 if (cleanDeadends)

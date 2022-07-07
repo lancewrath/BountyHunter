@@ -28,6 +28,8 @@ namespace RazMods.Hunter
         GeneratorDef def;
         List<StationModel> stationModels = new List<StationModel>();
         GridGenerator generator = null;
+        bool bIsServer = false;
+        bool bInitialized = false;
 
         public void GenerateGrid(string GeneratorName = "Default Generator")
         {
@@ -47,6 +49,14 @@ namespace RazMods.Hunter
         {
             GeneratorManager.Instance = this;
             base.Init(sessionComponent);
+            bIsServer = MyAPIGateway.Multiplayer.IsServer;
+            bInitialized = true;
+
+
+            if (!bIsServer)
+                return;
+
+
             ListReader<MyComponentDefinitionBase> entComps = MyDefinitionManager.Static.GetEntityComponentDefinitions();
             foreach (var def in entComps)
             {
@@ -58,77 +68,115 @@ namespace RazMods.Hunter
                     GeneratorDef gdef = MyAPIGateway.Utilities.SerializeFromXML<GeneratorDef>(gendef);
                     if (gdef != null)
                     {
-                        this.def = gdef;
-                        MyLog.Default.WriteLineAndConsole("Grid Generator: Loaded - " + gdef.Name);
+                        //this.def = gdef;                        
                         CompilePrefabs(gdef);
                         generatorDefs.Add(gdef);
+                        MyLog.Default.WriteLineAndConsole("Grid Generator: Loaded - " + gdef.Name);
                     }
                 }
             }
-            if(def==null)
-                def = new GeneratorDef();
+           // if(def==null)
+            //    def = new GeneratorDef();
 
         }
 
+        public override void UpdateBeforeSimulation()
+        {
+            if (!bIsServer)
+                return;
 
-        void CompilePrefabs(GeneratorDef generatorDef)
+            base.UpdateBeforeSimulation();
+        }
+
+        void RemapGrids(string prefab)
+        {
+            MyPrefabDefinition prefabDef = MyDefinitionManager.Static.GetPrefabDefinition(prefab);
+            if (prefabDef != null)
+            {
+                MyObjectBuilder_CubeGrid[] cgrids = prefabDef.CubeGrids;
+                foreach (var cgrid in cgrids)
+                {
+                    MyAPIGateway.Entities.RemapObjectBuilder(cgrid);
+                }
+            }
+        }
+
+        void CompilePrefabs(GeneratorDef generatorDef) 
         {
 
 
             foreach (var item in generatorDef.battery)
             {
-
-                MyDefinitionManager.Static.GetPrefabDefinition(item);
+                RemapGrids(item);
             }
             foreach (var item in generatorDef.ceiling)
             {
-                MyDefinitionManager.Static.GetPrefabDefinition(item);
+                RemapGrids(item);
             }
             foreach (var item in generatorDef.chair)
             {
-                MyDefinitionManager.Static.GetPrefabDefinition(item);
+                RemapGrids(item);
             }
             foreach (var item in generatorDef.deco)
             {
-                MyDefinitionManager.Static.GetPrefabDefinition(item);
+                RemapGrids(item);
             }
             foreach (var item in generatorDef.door)
             {
-                MyDefinitionManager.Static.GetPrefabDefinition(item);
+                RemapGrids(item);
             }
             foreach (var item in generatorDef.floor)
             {
-                MyDefinitionManager.Static.GetPrefabDefinition(item);
+                RemapGrids(item);
             }
             foreach (var item in generatorDef.gate)
             {
-                MyDefinitionManager.Static.GetPrefabDefinition(item);
+                RemapGrids(item);
             }
             foreach (var item in generatorDef.functionals)
             {
-                MyDefinitionManager.Static.GetPrefabDefinition(item);
+                RemapGrids(item);
             }
             foreach (var item in generatorDef.hangar)
             {
-                MyDefinitionManager.Static.GetPrefabDefinition(item);
+                RemapGrids(item);
             }
             foreach (var item in generatorDef.lcargo)
             {
-                MyDefinitionManager.Static.GetPrefabDefinition(item);
+                RemapGrids(item);
             }
             foreach (var item in generatorDef.scargo)
             {
-                MyDefinitionManager.Static.GetPrefabDefinition(item);
+                RemapGrids(item);
             }
             foreach (var item in generatorDef.solidwall)
             {
-                MyDefinitionManager.Static.GetPrefabDefinition(item);
+                RemapGrids(item);
             }
             foreach (var item in generatorDef.stairs)
             {
-                MyDefinitionManager.Static.GetPrefabDefinition(item);
+                RemapGrids(item);
             }
-
+            foreach (var item in generatorDef.light)
+            {
+                RemapGrids(item);
+            }
+            foreach (var item in generatorDef.reactor)
+            {
+                RemapGrids(item);
+            }
+            foreach (var item in generatorDef.lcd1)
+            {
+                RemapGrids(item);
+            }
+            foreach (var item in generatorDef.lcd2)
+            {
+                RemapGrids(item);
+            }
+            foreach (var item in generatorDef.entrance)
+            {
+                RemapGrids(item);
+            }
         }
 
 
@@ -145,22 +193,6 @@ namespace RazMods.Hunter
                 tw.Close();
             }
 
-            /*
-           PrefabObject statmodel = new PrefabObject("OLD_FLOOR_1");
-           string gendata = MyAPIGateway.Utilities.SerializeToXML(statmodel);
-           TextWriter tw = MyAPIGateway.Utilities.WriteFileInWorldStorage("PrefabObject.xml", typeof(string));
-           tw.Write(gendata);
-           tw.Close();
-            
-           if(generator!=null)
-           {
-               string gendata = MyAPIGateway.Utilities.SerializeToXML(generator.stationMap);
-               //string gendata = MyAPIGateway.Utilities.SerializeToXML(def);
-               TextWriter tw = MyAPIGateway.Utilities.WriteFileInWorldStorage("MapData.xml", typeof(string));
-               tw.Write(gendata);
-               tw.Close();
-           }
-           */
 
         }
     }
